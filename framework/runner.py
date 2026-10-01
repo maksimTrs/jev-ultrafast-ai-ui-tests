@@ -32,6 +32,9 @@ class RunResult:
 def start_goal(url, goal, *, max_actions, record_dir=None):
     """Opens url in a new tab and runs the goal. Returns the result and the open agent; the caller closes it."""
     agent = Agent(url, goal, record_dir=record_dir)
+    # jev opens its tab in the background: bring it forward so a headed run shows the test,
+    # and so headless Chrome paints it (a background tab may never render a screenshot).
+    agent.browser.call("Page.bringToFront")
     return _drive(agent, goal, max_actions), agent
 
 

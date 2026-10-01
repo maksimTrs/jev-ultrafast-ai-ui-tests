@@ -108,7 +108,6 @@ class JevSession:
 
     def _record(self, result):
         browser = self.agent.browser
-        browser.call("Page.bringToFront")  # a background tab may never paint in headless Chrome
         screenshot = browser.call("Page.captureScreenshot", format="jpeg", quality=72)["data"]
         folder = self._run_folder()
         folder.mkdir(parents=True, exist_ok=True)

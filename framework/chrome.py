@@ -55,7 +55,10 @@ class Chrome:
         ]
         self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.version = self._wait_for_cdp()
-        ensure_daemon()  # the harness daemon relays every cdp() call to this browser
+        startup_tabs = self._page_ids()
+        ensure_daemon()  # the harness daemon relays every cdp() call to this browser; it opens its own tab
+        for target_id in startup_tabs:  # the launch tab is unused: agents open their own
+            cdp("Target.closeTarget", targetId=target_id)
 
     def _wait_for_cdp(self, timeout=20):
         deadline = time.monotonic() + timeout
@@ -69,6 +72,10 @@ class Chrome:
                 time.sleep(0.2)
         self.close()
         raise RuntimeError(f"Chrome CDP did not open on port {CDP_PORT} within {timeout}s")
+
+    def _page_ids(self):
+        with urllib.request.urlopen(f"http://127.0.0.1:{CDP_PORT}/json/list", timeout=5) as response:
+            return [target["id"] for target in json.load(response) if target["type"] == "page"]
 
     def clear_origin(self, origin):
         cdp("Storage.clearDataForOrigin", origin=origin, storageTypes="all")
