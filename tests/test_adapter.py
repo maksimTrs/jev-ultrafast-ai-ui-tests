@@ -1,5 +1,6 @@
 """Offline checks of framework/jev_local.py: a real browser, no models."""
 
+import os
 from urllib.parse import quote
 
 from jev_ultrafast import Browser, model
@@ -27,7 +28,7 @@ def test_decisions_go_to_local_server(monkeypatch):
     sent = []
     monkeypatch.setattr(model.CLIENT, "post", lambda url, **_: sent.append(url) or Response())
     model.post_json("https://api.typesafe.ai/v1/systemone", "key", {})
-    assert sent == ["http://127.0.0.1:8791/v1/systemone"]
+    assert sent == [os.environ.get("LAYA_URL", "http://127.0.0.1:8791").rstrip("/") + "/v1/systemone"]
 
 
 def test_disabled_reasoning_reaches_ollama(monkeypatch):

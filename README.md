@@ -73,7 +73,7 @@ pytest ── framework/runner.py ── jev_ultrafast.Agent (observe → decide
 | Component | What it is | Why |
 |---|---|---|
 | [jev-ultrafast](https://github.com/browser-use/jev-ultrafast) | the agent loop: page snapshot → indexed elements → operation + target → execution | the model only chooses among observed elements and never generates selectors or code |
-| [cklxx/laya-browser](https://huggingface.co/cklxx/laya-browser) | a fine-tuned [laya](https://github.com/NandhaKishorM/laya) (mmBERT, 322M) speaking Jev's `/v1/systemone` protocol | a local replacement for Jev; base laya scores ≈ 0% on browser decisions without fine-tuning |
+| [cklxx/laya-browser](https://huggingface.co/cklxx/laya-browser) | a fine-tuned [laya](https://github.com/NandhaKishorM/laya) (mmBERT, 322M) speaking Jev's `/v1/systemone` protocol; pinned to revision `645cf366` in `serve.py` (the server code ships with the weights, so the pin fixes both) | a local replacement for Jev; base laya scores ≈ 0% on browser decisions without fine-tuning |
 | Ollama + `gemma4:e4b` | writes the field value when TYPE_TEXT is chosen | OpenAI-compatible API, so jev connects through env variables, no code |
 | `framework/chrome.py` | a dedicated Chrome: own CDP port, temporary profile, prefs | the user's browser is never touched; see "Pitfalls" |
 | `framework/jev_local.py` | three targeted patches of the pinned jev-ultrafast commit | see below |
@@ -116,6 +116,7 @@ If the decision server is not running, the live tests stop before opening the br
 | Variable | Default | Purpose |
 |---|---|---|
 | `LAYA_URL` | `http://127.0.0.1:8791` | decision server |
+| `DECISION_HOST`, `DECISION_PORT` | `127.0.0.1` (`0.0.0.0` in Docker), `8791` | where `serve.py` listens; change `LAYA_URL` to match |
 | `TEXT_MODEL_BASE_URL`, `TEXT_MODEL`, `TEXT_MODEL_API_KEY` | Ollama, `gemma4:e4b`, `ollama` | any OpenAI-compatible endpoint for TYPE_TEXT |
 | `TEXT_MODEL_REASONING` | `none` | turns off the text model's "thinking" |
 | `CHROME_PATH` | standard Chrome/Chromium locations | a custom browser binary |
@@ -133,7 +134,7 @@ docker compose down                                        # stop decision and o
 ```
 
 `tests` starts `decision` and `ollama` on its own. The `ollama-init` service downloads the model into a volume once.
-The report appears on the host in `./reports` (bind mount). Only noVNC is published, and only on `127.0.0.1`.
+The report appears on the host in `./reports` (bind mount): it stays after `--rm` and `docker compose down -v`. Only noVNC is published, and only on `127.0.0.1`.
 Requires an NVIDIA GPU: `compose.yaml` reserves one for `decision` and `ollama`.
 The GPU is passed through Docker Desktop + WSL2: on Windows only the NVIDIA driver is needed.
 Everything else is inside the containers (Ollama pinned to 0.35.0), so a host Ollama and its settings do not matter.
@@ -166,6 +167,9 @@ def test_login(jev):
                              max_actions=6)
     assert page.evaluate("location.pathname") == "/inventory.html", result.outcome  # status + agent error
 ```
+
+Chrome starts once per session. Before every test the `site` fixture clears saucedemo's cookies and `localStorage`,
+so tests do not depend on each other or on their order.
 
 Rules for phrasing goals (found experimentally, see below):
 
@@ -255,6 +259,8 @@ which is why it stays the default: it works with any Ollama settings.
 
 - Tested only on Windows 11 with an NVIDIA GPU, locally and in Docker Desktop + WSL2. macOS is not supported yet:
   Chrome paths, the CUDA-only torch index and the GPU reservation in `compose.yaml` are Windows/NVIDIA-specific.
+- No CI: the live tests need an NVIDIA GPU, which standard GitHub-hosted runners do not have
+  (GPU runners require a paid Team/Enterprise plan). The suite runs locally or in local Docker.
 - The model acts without a confidence threshold. Flakiness on ambiguous pages is caught only by the test assertions.
 - jev-ultrafast is an MVP: shadow DOM, iframes, file uploads and pop-up windows are not supported.
 - Goals are written for the model, not for a human. That is the price of a 322M model deciding in tens of milliseconds.
