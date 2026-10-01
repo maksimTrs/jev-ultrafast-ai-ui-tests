@@ -60,6 +60,22 @@ def logged_in(chrome, site):
 
 
 @pytest.fixture(scope="session")
+def decision_model():
+    """Without the decision server every agent fails on its first step; say so once, before any browser work."""
+    url = os.environ.get("LAYA_URL", "http://127.0.0.1:8791")
+    try:
+        urllib.request.urlopen(url, timeout=5).close()
+        return
+    except OSError as exc:
+        error = exc  # failing outside the except keeps the chained traceback out of the report
+    pytest.fail(
+        f"Decision server not reachable at {url} ({error}). Start it in another terminal: "
+        "uv run --project services/decision python services/decision/serve.py",
+        pytrace=False,
+    )
+
+
+@pytest.fixture(scope="session")
 def text_model():
     """Loads the text model up front. A cold load takes 20-40 s; jev's 25 s timeout would cancel it (Ollama aborts
     a load when the client disconnects) and the load time would skew the measurements."""
@@ -118,7 +134,7 @@ class JevSession:
 
 
 @pytest.fixture
-def jev(request, site, text_model):
+def jev(request, decision_model, text_model, site):
     session = JevSession(request, site)
     yield session
     session.close()

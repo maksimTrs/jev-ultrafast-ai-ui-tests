@@ -22,6 +22,11 @@ class RunResult:
     error: str | None = None
 
     @property
+    def outcome(self):
+        """The status with the agent's error, if any: the assertion message for a failed check."""
+        return f"{self.status}: {self.error}" if self.error else self.status
+
+    @property
     def avg_decision_ms(self):
         return round(sum(self.decision_ms) / len(self.decision_ms)) if self.decision_ms else 0
 

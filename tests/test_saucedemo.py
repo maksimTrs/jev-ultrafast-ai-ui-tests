@@ -15,36 +15,36 @@ LOGIN = "Enter username standard_user and password secret_sauce, then click Logi
 def test_login(jev):
     result, page = jev.start("/", LOGIN, max_actions=6)
 
-    assert page.evaluate("location.pathname") == "/inventory.html", result.status
+    assert page.evaluate("location.pathname") == "/inventory.html", result.outcome
     assert page.evaluate("document.querySelectorAll('.inventory_item').length") == 6
 
 
 def test_add_backpack_to_cart(jev, logged_in):
     result, page = jev.start("/inventory.html", "Add Sauce Labs Backpack to the cart.", max_actions=4)
 
-    assert page.evaluate("document.querySelector('.shopping_cart_badge')?.textContent") == "1", result.status
+    assert page.evaluate("document.querySelector('.shopping_cart_badge')?.textContent") == "1", result.outcome
     assert page.evaluate("localStorage.getItem('cart-contents')") == "[4]"  # 4 is the Backpack's item id
 
 
 def test_full_checkout(jev):
     result, page = jev.start("/", LOGIN, max_actions=6)
-    assert page.evaluate("location.pathname") == "/inventory.html", result.status
+    assert page.evaluate("location.pathname") == "/inventory.html", result.outcome
 
     result, page = jev.then("Add Sauce Labs Backpack to the cart.", max_actions=4)
-    assert page.evaluate("localStorage.getItem('cart-contents')") == "[4]", result.status
+    assert page.evaluate("localStorage.getItem('cart-contents')") == "[4]", result.outcome
 
     # "Open the cart" / "Go to the cart" make the model scroll; the icon's accessible name is "Cart, 1 items".
     result, page = jev.then("Click the shopping cart.", max_actions=3)
-    assert page.evaluate("location.pathname") == "/cart.html", result.status
+    assert page.evaluate("location.pathname") == "/cart.html", result.outcome
 
     goal = "Click Checkout, then enter first name John, last name Doe and postal code 12345."
     result, page = jev.then(goal, max_actions=6)
-    assert page.evaluate("location.pathname") == "/checkout-step-one.html", result.status
+    assert page.evaluate("location.pathname") == "/checkout-step-one.html", result.outcome
 
     # After the last field the model answers DONE rather than submitting, so submitting is its own goal.
     result, page = jev.then("Click Continue.", max_actions=3)
-    assert page.evaluate("location.pathname") == "/checkout-step-two.html", result.status
+    assert page.evaluate("location.pathname") == "/checkout-step-two.html", result.outcome
 
     result, page = jev.then("Click Finish.", max_actions=3)
-    assert page.evaluate("location.pathname") == "/checkout-complete.html", result.status
+    assert page.evaluate("location.pathname") == "/checkout-complete.html", result.outcome
     assert page.evaluate("document.querySelector('.complete-header')?.textContent") == "Thank you for your order!"
