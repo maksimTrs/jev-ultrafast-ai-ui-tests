@@ -6,6 +6,9 @@ The verdict comes from a deterministic check of the real DOM, not from the model
 
 Everything runs locally: no cloud TypeSafe Jev, no external LLM APIs.
 
+> [!WARNING]
+> ⚠️ **Tested only on Windows 11 + NVIDIA GPU** (locally and in Docker Desktop + WSL2). macOS is not supported yet — see [Limitations](#limitations).
+
 ## Why
 
 ### Context
@@ -245,6 +248,8 @@ which is why it stays the default: it works with any Ollama settings.
 
 ## Limitations
 
+- Tested only on Windows 11 with an NVIDIA GPU, locally and in Docker Desktop + WSL2. macOS is not supported yet:
+  Chrome paths, the CUDA-only torch index and the GPU reservation in `compose.yaml` are Windows/NVIDIA-specific.
 - The model acts without a confidence threshold. Flakiness on ambiguous pages is caught only by the test assertions.
 - jev-ultrafast is an MVP: shadow DOM, iframes, file uploads and pop-up windows are not supported.
 - Goals are written for the model, not for a human. That is the price of a 322M model deciding in tens of milliseconds.
