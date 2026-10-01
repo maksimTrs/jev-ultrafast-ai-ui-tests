@@ -1,4 +1,4 @@
-# AI-AT-FRAMEWORK
+# jev-ultrafast AI Framework for UI Tests
 
 Selector-free UI tests for [saucedemo.com](https://www.saucedemo.com/): a test states a goal in natural language,
 and a "System 1" decision model (one forward pass, no text generation) picks the operation and the page element.
