@@ -6,9 +6,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from jev_ultrafast import Agent
+from jev_ultrafast.browser import StalePage
 
 SECRET_FIELD = re.compile("password", re.IGNORECASE)
 INTERACTIVE = {"click", "fill", "select"}
+# The agent stops instead of acting on a less likely choice. On saucedemo every intended step scores 0.74 or higher;
+# the one unintended click ("View details" after "Add to cart") scores 0.18.
+MIN_PROBABILITY = 0.5
 
 
 @dataclass
@@ -65,9 +69,12 @@ def _drive(agent, goal, max_actions):
     _wait_for_controls(agent)
     status, error = "error", None
     try:
-        for state in agent.run():
-            if len(state["history"]) >= max_actions and state["status"] not in {"done", "blocked"}:
+        while agent.state["status"] not in {"done", "blocked"}:
+            if len(agent.state["history"]) >= max_actions:
                 status = "budget"
+                break
+            if stop := _tick(agent):
+                status, error = "blocked", stop
                 break
         else:
             status = agent.state["status"]
@@ -83,6 +90,30 @@ def _drive(agent, goal, max_actions):
         final_url=state["page"]["url"],
         error=error,
     )
+
+
+def _tick(agent):
+    """Agent.command("tick") with a confidence check between the decision and the action.
+
+    Returns why the run stops when the chosen action is below MIN_PROBABILITY (it is not executed), else None.
+    DONE and BLOCKED are not checked: they end the run, and the test's assertion is the verdict.
+    The StalePage recovery mirrors tick in jev_ultrafast/agent.py.
+    """
+    state = agent.state
+    try:
+        agent.command("predict")
+        decision = state["decision"]
+        probability = decision["probabilities"][decision["choice"]]
+        if decision["choice"] not in {"DONE", "BLOCKED"} and probability < MIN_PROBABILITY:
+            state["elapsed_ms"] = round((time.perf_counter() - state["started_at"]) * 1000)
+            return f"probability {probability:.3f} below {MIN_PROBABILITY}{_last_decision(state)}"
+        agent.command("act", {"fingerprint": state["page"]["fingerprint"]})
+    except StalePage:
+        state["decision"] = None
+        state["status"] = "ready"
+        state["page"] = agent.browser.observe(screenshot=agent.screenshots)
+        state["elapsed_ms"] = round((time.perf_counter() - state["started_at"]) * 1000)
+    return None
 
 
 def _wait_for_controls(agent, timeout=5):

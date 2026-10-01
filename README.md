@@ -54,11 +54,12 @@ What makes it promising:
 - **Choosing instead of generating.** The model cannot invent a selector or click a non-existent button:
   every action is an element from the page snapshot, re-validated right before execution.
 - **Speed and cost.** Tens of milliseconds per decision on a local GPU, no per-token billing.
-- **Measurable confidence.** Every decision carries a probability, so a threshold can be applied and doubtful steps
-  show up in the report.
+- **Measurable confidence.** Every decision carries a probability: the agent stops before a doubtful step instead of
+  taking it, and every probability is in the report.
 
 The downsides, honestly: goals have to be phrased for the model, long scenarios have to be split into steps,
-and without a confidence threshold the agent sometimes takes extra actions. For CI regression suites the classic
+and on ambiguous pages the model sometimes wants an extra action: the confidence threshold stops it, it does not
+make the model smarter. For CI regression suites the classic
 frameworks are still more reliable. This project is a working template and a test bed for the approach, not a replacement.
 
 ## Architecture
@@ -181,6 +182,8 @@ Rules for phrasing goals (found experimentally):
 - submit a form as a separate goal after typing (`then("Click Continue.")`);
 - set `max_actions` slightly above the minimum needed: extra steps show up in the report, and a loop stops
   with status `budget`;
+- a step below `MIN_PROBABILITY` (0.5, `framework/runner.py`) is not executed: the run stops with status `blocked`
+  and the reason in `result.error`;
 - the agent's status (`done`) is not a verdict. Check the result on the page or in `localStorage`;
 - prepare preconditions that the test does not verify without the agent (e.g. the `logged_in` fixture sets a cookie).
 
@@ -191,8 +194,9 @@ number of actions, agent time and average decision latency. Each test card shows
 the goal, a step table (operation, element, typed text, probability, decision and text ms) and the final screenshot.
 Passwords are masked. With `--record-steps`, failed tests also get a frame after every action.
 Raw data for every run is in `reports/artifacts/<test>/run-N/run.json`.
+A step stopped by the confidence threshold is shown as the agent error, with its probability.
 
-![HTML report, test_add_backpack_to_cart: the step table with the extra "View details" click at probability 0.179](docs/media/report.png)
+![HTML report, test_low_confidence_step_is_not_executed: "Add to cart" is executed, the next choice "View details" at probability 0.179 is stopped by the threshold](docs/media/report.png)
 
 <details>
 <summary>Full card of <code>test_full_checkout</code>: six goals in one tab</summary>
@@ -217,7 +221,8 @@ In the Linux container torch runs some operations as Triton kernels, which makes
   Chrome paths, the CUDA-only torch index and the GPU reservation in `compose.yaml` are Windows/NVIDIA-specific.
 - No CI: the live tests need an NVIDIA GPU, which standard GitHub-hosted runners do not have
   (GPU runners require a paid Team/Enterprise plan). The suite runs locally or in local Docker.
-- The model acts without a confidence threshold. Flakiness on ambiguous pages is caught only by the test assertions.
+- The confidence threshold (0.5) is tuned on saucedemo, where every intended step scores 0.74 or higher;
+  another site may need a different value.
 - jev-ultrafast is an MVP: shadow DOM, iframes, file uploads and pop-up windows are not supported.
 - Goals are written for the model, not for a human. That is the price of a 322M model deciding in tens of milliseconds.
 

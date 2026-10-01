@@ -26,6 +26,17 @@ def test_add_backpack_to_cart(jev, logged_in):
     assert page.evaluate("localStorage.getItem('cart-contents')") == "[4]"  # 4 is the Backpack's item id
 
 
+def test_low_confidence_step_is_not_executed(jev, logged_in):
+    # After "Add to cart" the model's next choice is "View details" at ~0.18, below MIN_PROBABILITY.
+    # Here the agent's own stop is what is checked, so its status is part of the verdict.
+    result, page = jev.start("/inventory.html", "Add Sauce Labs Backpack to the cart.", max_actions=4)
+
+    assert result.status == "blocked", result.outcome
+    assert result.error.startswith("probability "), result.outcome
+    assert page.evaluate("location.pathname") == "/inventory.html"  # "View details" was not clicked
+    assert page.evaluate("localStorage.getItem('cart-contents')") == "[4]"
+
+
 def test_full_checkout(jev):
     result, page = jev.start("/", LOGIN, max_actions=6)
     assert page.evaluate("location.pathname") == "/inventory.html", result.outcome
