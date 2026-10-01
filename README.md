@@ -33,8 +33,8 @@ Cloud Jev is waitlisted and paid, so this project uses an open alternative,
 2. Replaced cloud Jev with a local decision server (laya-browser on GPU) and the text LLM with a local `gemma4:e4b` in Ollama.
 3. Wrapped it all in a pytest framework: isolated Chrome, fixtures, independent DOM checks, an HTML report with the agent's steps.
 4. Two ways to run: locally and with `docker compose` (GPU in containers, the browser visible through noVNC).
-5. Ran three happy-path saucedemo scenarios. Limitations of the model, jev-ultrafast and the environment found along
-   the way, and their workarounds, are documented below: they are the main practical outcome of the experiment.
+5. Ran three happy-path saucedemo scenarios. What was found along the way became the rules for phrasing goals
+   and the limitations below.
 
 ### How it differs
 
@@ -63,19 +63,17 @@ frameworks are still more reliable. This project is a working template and a tes
 
 ## Architecture
 
-```
-pytest ── framework/runner.py ── jev_ultrafast.Agent (observe → decide → act)
-                                   ├─ decide: POST /v1/systemone  → laya-browser :8791   (services/decision, torch + CUDA)
-                                   ├─ type:   POST /v1/chat/completions → Ollama :11434 (gemma4:e4b)
-                                   └─ act:    CDP via browser-harness → isolated Chrome :9333 (temporary profile)
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/architecture-dark.png">
+  <img alt="Architecture: a pytest goal goes to the jev-ultrafast agent, which asks laya-browser on the GPU for each decision, calls Ollama only to type text and acts in an isolated Chrome on saucedemo.com; the verdict is an assertion on the real DOM, and every step with its probability goes to the HTML report." src="docs/media/architecture.png">
+</picture>
 
 | Component | What it is | Why |
 |---|---|---|
 | [jev-ultrafast](https://github.com/browser-use/jev-ultrafast) | the agent loop: page snapshot → indexed elements → operation + target → execution | the model only chooses among observed elements and never generates selectors or code |
 | [cklxx/laya-browser](https://huggingface.co/cklxx/laya-browser) | a fine-tuned [laya](https://github.com/NandhaKishorM/laya) (mmBERT, 322M) speaking Jev's `/v1/systemone` protocol; pinned to revision `645cf366` in `serve.py` (the server code ships with the weights, so the pin fixes both) | a local replacement for Jev; base laya scores ≈ 0% on browser decisions without fine-tuning |
-| Ollama + `gemma4:e4b` | writes the field value when TYPE_TEXT is chosen | OpenAI-compatible API, so jev connects through env variables, no code |
-| `framework/chrome.py` | a dedicated Chrome: own CDP port, temporary profile, prefs | the user's browser is never touched; see "Pitfalls" |
+| Ollama + `gemma4:e4b` | writes the field value when TYPE_TEXT is chosen | OpenAI-compatible API, so jev connects through env variables, no code; models under ~4B parameters confuse the fields |
+| `framework/chrome.py` | a dedicated Chrome: own CDP port, temporary profile, prefs | the user's browser is never touched; the prefs turn off Chrome's leaked-password dialog, which swallows clicks after login with `secret_sauce` |
 | `framework/jev_local.py` | three targeted patches of the pinned jev-ultrafast commit | see below |
 
 ### jev-ultrafast patches (`framework/jev_local.py`)
@@ -142,6 +140,9 @@ The first run downloads ~7 GB of weights; later runs reuse the volumes. The `dec
 
 ### Where the models live and how to remove everything
 
+<details>
+<summary>Paths, sizes and cleanup commands</summary>
+
 | What | Where | Size |
 |---|---|---|
 | laya-browser checkpoint (local) | Hugging Face cache: `~/.cache/huggingface/hub` | ~0.7 GB |
@@ -154,6 +155,8 @@ docker compose down -v                                                   # conta
 docker image rm ai-at-framework-decision ai-at-framework-tests
 ollama rm gemma4:e4b
 ```
+
+</details>
 
 ## Writing a test
 
@@ -171,7 +174,7 @@ def test_login(jev):
 Chrome starts once per session. Before every test the `site` fixture clears saucedemo's cookies and `localStorage`,
 so tests do not depend on each other or on their order.
 
-Rules for phrasing goals (found experimentally, see below):
+Rules for phrasing goals (found experimentally):
 
 - one short goal per action or per form; long scenarios as a chain of `then()` calls with a check after each step;
 - explicit verbs and element names as they appear on the page: "Enter ..., then click Login.", "Click Checkout.";
@@ -189,71 +192,24 @@ the goal, a step table (operation, element, typed text, probability, decision an
 Passwords are masked. With `--record-steps`, failed tests also get a frame after every action.
 Raw data for every run is in `reports/artifacts/<test>/run-N/run.json`.
 
+![HTML report, test_add_backpack_to_cart: the step table with the extra "View details" click at probability 0.179](docs/media/report.png)
+
+<details>
+<summary>Full card of <code>test_full_checkout</code>: six goals in one tab</summary>
+
+![HTML report, test_full_checkout: six agent runs from login to the order confirmation, each with its goal, final URL and step table](docs/media/report-checkout.png)
+
+</details>
+
 ## Results (RTX 4090 Laptop)
 
-All tests passed 3 out of 3 in every mode. Times are agent work, excluding browser start-up:
+All tests passed 3 out of 3 in every mode. Decision model latency, per decision:
 
-| Test | Goals | Agent actions | Local (Windows) | Docker (Linux) |
-|---|---|---|---|---|
-| `test_login` | 1 | 3 | 1.5–2.2 s | 0.7 s |
-| `test_add_backpack_to_cart` | 1 | 2 (one unnecessary) | 0.5–1 s | 0.2 s |
-| `test_full_checkout` | 6 | 15 | 4.5–6 s | 2.6 s |
-| Decision model, per decision | | | 40–150 ms | 25–40 ms |
+| Local (Windows) | Docker (Linux) |
+|---|---|
+| 40–150 ms | 25–40 ms |
 
 In the Linux container torch runs some operations as Triton kernels, which makes decisions 2–4× faster than on Windows.
-Agent time includes decisions, typing (~150–200 ms per field with gemma's reasoning off) and waiting for the page.
-
-### Why the text model is `gemma4:e4b`
-
-The text model only copies a value from the goal into the field ("standard_user", "John", "12345"), so smaller models
-were tried. Benchmark: jev's own `field_text()` on the five saucedemo fields, 10 rounds, reasoning off, warm model:
-
-| Model | Disk | Correct | Median per field | Verdict |
-|---|---|---|---|---|
-| `gemma3:1b` | 0.8 GB | 10/50 | 185 ms | ❌ types the password into Username, "the field value" |
-| `qwen3.5:2b-q4_K_M` | 1.9 GB | 40/50 | 84 ms | ❌ "Doe" into First Name, broken JSON |
-| `gemma4:e2b-it-qat` | 4.3 GB | 35/50 | 95 ms | ❌ "Click Checkout", "Swag Labs" as values |
-| `qwen3:4b-instruct` | 2.5 GB | 50/50 | 188 ms | ✅ live 3/3, but only with an 8K context (below) |
-| `gemma4:e4b` | 6.6 GB | 50/50 | 119 ms | ✅ live 3/3 — the default |
-
-Models under ~4B parameters confuse the fields. `qwen3:4b-instruct` works but depends on Ollama's context setting:
-with a 128K context its KV cache takes 23 GB and spills to the CPU (344 ms per field), so it needs a model alias
-with `PARAMETER num_ctx 8192`. gemma4 mostly uses 512-token sliding-window attention and is not affected,
-which is why it stays the default: it works with any Ollama settings.
-
-### What we learned about the model
-
-- **Phrasing matters.** "Log in with username ... and password ..." → the model presses Login on an empty form right away.
-  "Enter username ... and password ..., then click Login." → correct (probabilities 0.93–0.98).
-- **Long goals fail.** Checkout as a single goal never passed: after filling in the login form the model kept typing
-  into Username. This matches the laya-browser model card: 20–26% on real multi-step tasks.
-  So checkout is a chain of short goals in one tab (`jev.then(...)`), with a page check after each.
-- **The model does not submit a form after typing.** After the last field it answers DONE whatever the phrasing,
-  so `Click Continue.` is a separate goal. That is why continuing in the same tab is needed:
-  a new tab would lose the typed values.
-- **Ambiguous labels.** The page has six "Add to cart" buttons with the same label. The model clicks the first one
-  (which happens to be the Backpack) and then makes an extra "View details" click with probability 0.18. The test passes
-  because it checks the cart, but the extra step is visible in the report. The jev loop has no confidence threshold.
-- **The cart icon** has the accessible name "Cart, 1 items": "Click the shopping cart." works (0.96),
-  while "Go to the cart." makes the model scroll.
-
-## Pitfalls (already handled)
-
-- **Chrome's leaked-password dialog.** `secret_sauce` is in breach lists, so after login Chrome asynchronously opens
-  a modal "change your password" dialog. It swallows clicks on the page and tests fail at random.
-  `--disable-features=PasswordLeakDetection` does not help; profile prefs do (`PROFILE_PREFS` in `chrome.py`):
-  clicks worked 0/4 without them and 4/4 with them.
-- **A background tab in headless mode** may never paint, and `Page.captureScreenshot` hangs: the tab is brought
-  to the front before the screenshot.
-- **Client-side rendering.** A page can be snapshotted before React renders it, and on an empty page the model
-  answers DONE. The runner waits for interactive elements to appear.
-- **Import order.** browser-harness reads `BU_NAME`/`BU_CDP_URL` at import time, so they are set
-  in `framework/__init__.py`. Do not import `browser_harness` directly in tests.
-- **A race on Windows** when stopping the harness daemon (`PermissionError` on the port file): the stop is retried.
-- **Triton in the Linux image.** On Linux torch 2.14 routes some eager operations to Triton kernels, and on first use
-  Triton builds its driver with a C compiler. Without `gcc` in the image the decision server answers HTTP 400.
-- **gemma's cold load** (20–40 s) exceeds jev's 25-second timeout, and Ollama aborts a load when the client disconnects.
-  So the session starts with a warm-up through a direct request with a long timeout.
 
 ## Limitations
 
@@ -265,12 +221,3 @@ which is why it stays the default: it works with any Ollama settings.
 - jev-ultrafast is an MVP: shadow DOM, iframes, file uploads and pop-up windows are not supported.
 - Goals are written for the model, not for a human. That is the price of a 322M model deciding in tens of milliseconds.
 
-## Next steps
-
-- **Confidence threshold.** Stop the agent with status `blocked` when the chosen action's probability is below
-  a threshold (e.g. 0.5): the 0.18 extra click in `test_add_backpack_to_cart` would become an explicit failure
-  instead of a silent step.
-- **Comparison with the classics.** The same three scenarios in Playwright, to compare speed and maintenance cost.
-- **Negative scenarios** (`locked_out_user`, empty form fields): check whether the model recognises error messages.
-- **Upstream updates.** Once PRs #175/#123/#39 are merged into jev-ultrafast, the matching patches in
-  `framework/jev_local.py` can be removed.
