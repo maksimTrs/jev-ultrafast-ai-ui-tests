@@ -82,10 +82,12 @@ If the code changed after a re-pin, the run fails with a clear error instead of 
 
 ## Running locally
 
-Requires [uv](https://docs.astral.sh/uv/), Chrome, Ollama and an NVIDIA GPU (CPU works too, but slower).
+Requires [uv](https://docs.astral.sh/uv/), Chrome, Ollama (tested with 0.35.0; desktop app or CLI, same server)
+and an NVIDIA GPU (CPU works too, but slower).
 
 ```bash
-# 1. decision server (separate environment with torch; the first start downloads ~0.7 GB of weights)
+# 1. decision server: keep it running in a separate terminal
+#    (own environment with torch; the first start downloads ~0.7 GB of weights)
 uv run --project services/decision python services/decision/serve.py
 
 # 2. text model
@@ -97,6 +99,9 @@ uv run pytest -m "not live"            # offline adapter checks, no models neede
 uv run --env-file .env pytest          # everything, in a visible Chrome window
 uv run --env-file .env pytest --headless --record-steps
 ```
+
+If the decision server is not running, the live tests stop before opening the browser with
+`Decision server not reachable at ... Start it in another terminal: ...`.
 
 ### Configuration
 
@@ -121,7 +126,9 @@ docker compose down                                        # stop decision and o
 
 `tests` starts `decision` and `ollama` on its own. The `ollama-init` service downloads the model into a volume once.
 The report appears on the host in `./reports` (bind mount). Only noVNC is published, and only on `127.0.0.1`.
+Requires an NVIDIA GPU: `compose.yaml` reserves one for `decision` and `ollama`.
 The GPU is passed through Docker Desktop + WSL2: on Windows only the NVIDIA driver is needed.
+Everything else is inside the containers (Ollama pinned to 0.35.0), so a host Ollama and its settings do not matter.
 The first run downloads ~7 GB of weights; later runs reuse the volumes. The `decision` image is ~11 GB, ~7 GB of it torch with CUDA.
 
 ### Where the models live and how to remove everything
@@ -149,7 +156,7 @@ and the check is a plain `assert` against the real DOM:
 def test_login(jev):
     result, page = jev.start("/", "Enter username standard_user and password secret_sauce, then click Login.",
                              max_actions=6)
-    assert page.evaluate("location.pathname") == "/inventory.html", result.status
+    assert page.evaluate("location.pathname") == "/inventory.html", result.outcome  # status + agent error
 ```
 
 Rules for phrasing goals (found experimentally, see below):
@@ -183,6 +190,24 @@ All tests passed 3 out of 3 in every mode. Times are agent work, excluding brows
 
 In the Linux container torch runs some operations as Triton kernels, which makes decisions 2–4× faster than on Windows.
 Agent time includes decisions, typing (~150–200 ms per field with gemma's reasoning off) and waiting for the page.
+
+### Why the text model is `gemma4:e4b`
+
+The text model only copies a value from the goal into the field ("standard_user", "John", "12345"), so smaller models
+were tried. Benchmark: jev's own `field_text()` on the five saucedemo fields, 10 rounds, reasoning off, warm model:
+
+| Model | Disk | Correct | Median per field | Verdict |
+|---|---|---|---|---|
+| `gemma3:1b` | 0.8 GB | 10/50 | 185 ms | ❌ types the password into Username, "the field value" |
+| `qwen3.5:2b-q4_K_M` | 1.9 GB | 40/50 | 84 ms | ❌ "Doe" into First Name, broken JSON |
+| `gemma4:e2b-it-qat` | 4.3 GB | 35/50 | 95 ms | ❌ "Click Checkout", "Swag Labs" as values |
+| `qwen3:4b-instruct` | 2.5 GB | 50/50 | 188 ms | ✅ live 3/3, but only with an 8K context (below) |
+| `gemma4:e4b` | 6.6 GB | 50/50 | 119 ms | ✅ live 3/3 — the default |
+
+Models under ~4B parameters confuse the fields. `qwen3:4b-instruct` works but depends on Ollama's context setting:
+with a 128K context its KV cache takes 23 GB and spills to the CPU (344 ms per field), so it needs a model alias
+with `PARAMETER num_ctx 8192`. gemma4 mostly uses 512-token sliding-window attention and is not affected,
+which is why it stays the default: it works with any Ollama settings.
 
 ### What we learned about the model
 
