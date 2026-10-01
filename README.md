@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/ebff5e4e-d948-4513-b849-a853038ab8e6
+
 # jev-ultrafast AI Framework for UI Tests
 
 Selector-free UI tests for [saucedemo.com](https://www.saucedemo.com/): a test states a goal in natural language,
@@ -6,9 +10,6 @@ The verdict comes from a deterministic check of the real DOM, not from the model
 
 Everything runs locally: no cloud TypeSafe Jev, no external LLM APIs.
 
-<p align="center">
-  <a href="docs/media/demo.mp4"><img src="docs/media/demo.jpg" width="640" alt="23-second demo: a goal instead of a selector, the agent's real decisions on saucedemo"></a>
-</p>
 
 > [!WARNING]
 > ⚠️ **Tested only on Windows 11 + NVIDIA GPU** (locally and in Docker Desktop + WSL2). macOS is not supported yet — see [Limitations](#limitations).
