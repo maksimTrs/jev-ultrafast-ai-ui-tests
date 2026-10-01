@@ -1,0 +1,20 @@
+[project]
+name = "ai-at-framework"
+version = "0.1.0"
+description = "UI tests for saucedemo.com driven by a local Jev-style decision model instead of selectors."
+requires-python = ">=3.12"
+dependencies = [
+    # Not on PyPI; pinned to a reviewed commit because framework/jev_local.py patches its internals.
+    "jev-ultrafast @ git+https://github.com/browser-use/jev-ultrafast@1231850a0bf1a0c0341fe408ef1668dbbfdfac46",
+    "pytest>=8.4,<9",
+    "pytest-html>=4.2,<5",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "--html=reports/report.html --self-contained-html"
+markers = ["live: drives a real browser with the local decision and text models"]

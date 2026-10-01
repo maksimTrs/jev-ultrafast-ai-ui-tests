@@ -1,0 +1,7 @@
+.git
+.idea
+.venv
+.env
+reports
+services
+**/__pycache__
