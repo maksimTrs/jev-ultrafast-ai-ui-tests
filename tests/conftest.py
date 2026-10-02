@@ -3,6 +3,7 @@ import json
 import os
 import random
 import re
+import shutil
 import urllib.request
 from html import escape
 from pathlib import Path
@@ -87,6 +88,8 @@ def decision_model():
 def text_model():
     """Loads the text model up front. A cold load takes 20-40 s; jev's 25 s timeout would cancel it (Ollama aborts
     a load when the client disconnects) and the load time would skew the measurements."""
+    if missing := [v for v in ("TEXT_MODEL_BASE_URL", "TEXT_MODEL", "TEXT_MODEL_API_KEY") if not os.environ.get(v)]:
+        pytest.fail(f"{', '.join(missing)} not set. Run with the settings: uv run --env-file .env pytest", pytrace=False)
     request = urllib.request.Request(
         os.environ["TEXT_MODEL_BASE_URL"].rstrip("/") + "/chat/completions",
         data=json.dumps(
@@ -106,6 +109,8 @@ class JevSession:
     def __init__(self, request, site):
         self.request, self.site = request, site
         self.folder = ARTIFACTS / re.sub(r"[^\w.-]+", "_", request.node.name)
+        # Frames from an earlier run of this test would otherwise land in this run's report.
+        shutil.rmtree(self.folder, ignore_errors=True)
         self.record = request.config.getoption("--record-steps")
         self.agent = None
         request.node.jev_runs = []

@@ -1,6 +1,6 @@
 # Port plan: Windows → macOS (Apple Silicon)
 
-Handoff for a future session on a Mac. Status: not started. The project currently runs only on Windows 11 with an NVIDIA
+Handoff for a future session on a Mac. The project currently runs only on Windows 11 with an NVIDIA
 GPU (locally and in Docker Desktop + WSL2). Goal: a **macOS-only** build — remove the Windows/NVIDIA logic, no hybrid.
 
 Decided by the owner:
@@ -27,7 +27,6 @@ Decided by the owner:
 | `services/decision/Dockerfile` | `gcc libc6-dev` for Triton (CUDA torch on Linux) | check whether the CPU torch still needs it (decision server must not answer HTTP 400); remove if not |
 | `compose.yaml` | `x-gpu` anchor, `<<: *gpu`, `ollama`, `ollama-init`, volume `ollama-models` | remove; `tests` env `TEXT_MODEL_BASE_URL: http://host.docker.internal:11434/v1`; `tests` depends only on `decision` |
 | `README.md` | Windows/WSL2/NVIDIA wording, results table "Local (Windows)", Triton note, Windows race pitfall, model locations table (Ollama volume) | rewrite for macOS; re-measure the results table |
-| `README.ru.md` | Russian copy of README (gitignored — **not in git**, copy it manually or recreate) | same changes |
 
 ## Must verify on the Mac
 
@@ -43,13 +42,13 @@ Decided by the owner:
 ## Steps (each with its check)
 
 1. **Local Chrome** — `KNOWN_PATHS` for macOS, `.env.example`.
-   Check: `uv sync && uv run pytest -m "not live"` → 3 passed.
+   Check: `uv sync && uv run pytest -m "not live"` → all passed.
 2. **Decision server** — torch from PyPI, re-lock.
    Check: `uv run --project services/decision python services/decision/serve.py`; `curl http://127.0.0.1:8791/` → `{"ok": true, ...}`.
 3. **Local live run** — `ollama pull gemma4:e4b`, `cp .env.example .env`, `uv run --env-file .env pytest`.
-   Check: 6 passed, 3 runs in a row; then remove the `PermissionError` retry and repeat 3×.
+   Check: all passed, 3 runs in a row; then remove the `PermissionError` retry and repeat 3×.
 4. **Docker** — `compose.yaml` without GPU/Ollama services, decision Dockerfile.
-   Check: `docker compose run --rm --service-ports tests` → 3 live passed; browser visible at `http://localhost:7900/vnc.html`;
+   Check: `docker compose run --rm --service-ports tests` → all live passed; browser visible at `http://localhost:7900/vnc.html`;
    `./reports/report.html` on the host.
-5. **Docs** — README (and README.ru.md): requirements, commands, results table with Mac numbers, pitfalls, model locations.
+5. **Docs** — README: requirements, commands, results table with Mac numbers, pitfalls, model locations.
    Check: no "Windows", "WSL", "NVIDIA", "cu126" left in the repo unless historical (`grep -ri`).

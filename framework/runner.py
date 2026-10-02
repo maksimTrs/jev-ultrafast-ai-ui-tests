@@ -61,14 +61,13 @@ def continue_goal(agent, goal, *, max_actions, record_dir=None):
     agent.record_dir = Path(record_dir) if record_dir else None
     if agent.record_dir:
         agent.record_dir.mkdir(parents=True, exist_ok=True)
-    agent.state["page"] = agent.browser.observe(screenshot=agent.screenshots)
     return _drive(agent, goal, max_actions)
 
 
 def _drive(agent, goal, max_actions):
-    _wait_for_controls(agent)
     status, error = "error", None
     try:
+        _wait_for_controls(agent)
         while agent.state["status"] not in {"done", "blocked"}:
             if len(agent.state["history"]) >= max_actions:
                 status = "budget"
@@ -117,11 +116,16 @@ def _tick(agent):
 
 
 def _wait_for_controls(agent, timeout=5):
-    """A client-rendered page can be observed before it renders; on an empty page the model answers DONE."""
+    """Observes the page afresh: the previous goal may have left it mid-navigation.
+
+    A client-rendered page can be observed before it renders; on an empty page the model answers DONE.
+    """
     deadline = time.monotonic() + timeout
-    while not any(a["kind"] in INTERACTIVE for a in agent.state["page"]["actions"]) and time.monotonic() < deadline:
-        time.sleep(0.1)
+    while True:
         agent.state["page"] = agent.browser.observe(screenshot=agent.screenshots)
+        if any(a["kind"] in INTERACTIVE for a in agent.state["page"]["actions"]) or time.monotonic() >= deadline:
+            return
+        time.sleep(0.1)
 
 
 def _last_decision(state):
