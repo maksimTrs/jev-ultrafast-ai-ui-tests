@@ -1,5 +1,6 @@
 """Offline checks of framework/runner.py: no models."""
 
+import time
 from typing import ClassVar
 
 import pytest
@@ -25,6 +26,38 @@ def test_continue_goal_refuses_an_unknown_agent_state(agent):
 
     with pytest.raises(RuntimeError, match="Agent.state changed"):
         runner.continue_goal(agent, "Click Go.", max_actions=1)
+
+
+class Undecided:
+    """Sure which button, unsure whether to click at all: CLICK 0.45, TYPE_TEXT 0.40, DONE 0.15."""
+
+    def __init__(self):
+        self.acted = False
+        self.state = {
+            "started_at": time.perf_counter(), "decisions": [], "history": [],
+            "page": {"fingerprint": "f", "actions": [{"id": "e1", "label": "Go"}]},
+        }  # fmt: skip
+
+    def command(self, name, body=None):
+        if name == "act":
+            self.acted = True
+            return
+        decision = {
+            "choice": "e1", "operation": "CLICK", "target": "1", "probabilities": {"e1": 0.99},
+            "operation_probabilities": {"CLICK": 0.45, "TYPE_TEXT": 0.40, "DONE": 0.15},
+            "target_probabilities": {"1": 0.99},
+        }  # fmt: skip
+        self.state["decision"] = decision
+        self.state["decisions"].append(decision)
+
+
+def test_unsure_operation_stops_the_step_despite_a_sure_target():
+    agent = Undecided()
+
+    stop = runner._tick(agent)
+
+    assert stop and stop.startswith("probability 0.44"), stop
+    assert not agent.acted
 
 
 class BrokenTab:

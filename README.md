@@ -234,7 +234,8 @@ In the Linux container torch runs some operations as Triton kernels, which makes
   Chrome paths, the CUDA-only torch index and the GPU reservation in `compose.yaml` are Windows/NVIDIA-specific.
 - No CI: the live tests need an NVIDIA GPU, which standard GitHub-hosted runners do not have
   (GPU runners require a paid Team/Enterprise plan). The suite runs locally or in local Docker.
-- The confidence threshold (0.5) is tuned on saucedemo, where every intended step scores 0.81 or higher;
+- The confidence threshold (0.5, on P(operation) × P(target)) is tuned on saucedemo, where every intended step
+  scores 0.77 or higher;
   another site may need a different value.
 - The agent only sees the browser window and rarely scrolls. For an item below it, the model may confidently open the
   item's page or answer DONE instead of scrolling to its button. The threshold does not catch a confident choice;

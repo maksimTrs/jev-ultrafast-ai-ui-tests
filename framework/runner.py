@@ -10,8 +10,9 @@ from jev_ultrafast.browser import StalePage
 
 SECRET_FIELD = re.compile("password", re.IGNORECASE)
 INTERACTIVE = {"click", "fill", "select"}
-# The agent stops instead of acting on a less likely choice. On saucedemo every intended step scores 0.81 or higher;
-# an ambiguous goal ("Add a T-shirt" with two T-shirts for sale) tops out at 0.12.
+# The agent stops instead of taking a less likely step: P(operation) × P(target). A sure target alone is not enough,
+# the model may still doubt whether to click at all. On saucedemo every intended step scores 0.77 or higher;
+# an ambiguous goal ("Add a T-shirt" with two T-shirts for sale) tops out at 0.11.
 MIN_PROBABILITY = 0.5
 # Agent.state of the pinned jev-ultrafast: continue_goal resets each key by hand and _tick mirrors its tick.
 STATE_KEYS = {
@@ -110,10 +111,11 @@ def _tick(agent):
     The StalePage recovery mirrors tick in jev_ultrafast/agent.py.
     """
     state = agent.state
+    steps = len(state["history"])
     try:
         agent.command("predict")
         decision = state["decision"]
-        probability = decision["probabilities"][decision["choice"]]
+        probability = _probability(decision)
         if decision["choice"] not in {"DONE", "BLOCKED"} and probability < MIN_PROBABILITY:
             state["elapsed_ms"] = round((time.perf_counter() - state["started_at"]) * 1000)
             return f"probability {probability:.3f} below {MIN_PROBABILITY}{_last_decision(state)}"
@@ -123,7 +125,17 @@ def _tick(agent):
         state["status"] = "ready"
         state["page"] = agent.browser.observe(screenshot=agent.screenshots)
         state["elapsed_ms"] = round((time.perf_counter() - state["started_at"]) * 1000)
+    if len(state["history"]) > steps:  # upstream records the target's probability; the report shows the checked one
+        state["history"][-1]["probability"] = probability
     return None
+
+
+def _probability(decision):
+    """How likely the whole step is: its operation times its target. Scroll, wait, DONE and BLOCKED have no target."""
+    probability = decision["operation_probabilities"][decision["operation"]]
+    if decision["target"] is not None:
+        probability *= decision["target_probabilities"][decision["target"]]
+    return probability
 
 
 def _wait_for_controls(agent, timeout=5):

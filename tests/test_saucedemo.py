@@ -27,7 +27,7 @@ def test_add_backpack_to_cart(jev, logged_in):
 
 
 def test_low_confidence_step_is_not_executed(jev, logged_in):
-    # Two T-shirts are for sale, so the goal is ambiguous: the model spreads its choice (~0.12 at best) below
+    # Two T-shirts are for sale, so the goal is ambiguous: the model spreads its choice (~0.11 at best) below
     # MIN_PROBABILITY. Here the agent's own stop is what is checked, so its status is part of the verdict.
     result, page = jev.start("/inventory.html", "Add a T-shirt to the cart.", max_actions=4)
 
