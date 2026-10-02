@@ -4,6 +4,7 @@ import json
 import os
 import shlex
 import shutil
+import socket
 import subprocess
 import tempfile
 import time
@@ -13,7 +14,7 @@ from pathlib import Path
 from browser_harness.admin import ensure_daemon, restart_daemon
 from browser_harness.helpers import cdp
 
-from framework import CDP_PORT, HARNESS_NAME
+from framework import CDP_HOST, CDP_PORT, HARNESS_NAME
 
 KNOWN_PATHS = (
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -40,6 +41,14 @@ def chrome_path():
 
 class Chrome:
     def __init__(self, headless=False):
+        # A Chrome left from an earlier run keeps the port: this one cannot bind it, and every CDP call would
+        # silently drive the old (perhaps headless) browser instead.
+        with socket.socket() as probe:
+            if probe.connect_ex((CDP_HOST, CDP_PORT)) == 0:
+                raise RuntimeError(
+                    f"Port {CDP_PORT} is already in use, probably by a Chrome left from an earlier run. "
+                    "Close it or set CHROME_CDP_PORT."
+                )
         self.profile = tempfile.mkdtemp(prefix="jev-chrome-")
         (Path(self.profile) / "Default").mkdir()
         (Path(self.profile) / "Default" / "Preferences").write_text(json.dumps(PROFILE_PREFS), encoding="utf-8")
@@ -66,7 +75,7 @@ class Chrome:
             if self.process.poll() is not None:
                 raise RuntimeError(f"Chrome exited with code {self.process.returncode} before CDP was ready")
             try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{CDP_PORT}/json/version", timeout=1) as response:
+                with urllib.request.urlopen(f"http://{CDP_HOST}:{CDP_PORT}/json/version", timeout=1) as response:
                     return json.load(response)["Browser"]
             except OSError:
                 time.sleep(0.2)
@@ -74,7 +83,7 @@ class Chrome:
         raise RuntimeError(f"Chrome CDP did not open on port {CDP_PORT} within {timeout}s")
 
     def _page_ids(self):
-        with urllib.request.urlopen(f"http://127.0.0.1:{CDP_PORT}/json/list", timeout=5) as response:
+        with urllib.request.urlopen(f"http://{CDP_HOST}:{CDP_PORT}/json/list", timeout=5) as response:
             return [target["id"] for target in json.load(response) if target["type"] == "page"]
 
     def clear_origin(self, origin):

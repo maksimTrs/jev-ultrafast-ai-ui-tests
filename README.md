@@ -75,7 +75,7 @@ frameworks are still more reliable. This project is a working template and a tes
 | [cklxx/laya-browser](https://huggingface.co/cklxx/laya-browser) | a fine-tuned [laya](https://github.com/NandhaKishorM/laya) (mmBERT, 322M) speaking Jev's `/v1/systemone` protocol; pinned to revision `645cf366` in `serve.py` (the server code ships with the weights, so the pin fixes both) | a local replacement for Jev; base laya scores ≈ 0% on browser decisions without fine-tuning |
 | Ollama + `gemma4:e4b` | writes the field value when TYPE_TEXT is chosen | OpenAI-compatible API, so jev connects through env variables, no code; models under ~4B parameters confuse the fields |
 | `framework/chrome.py` | a dedicated Chrome: own CDP port, temporary profile, prefs | the user's browser is never touched; the prefs turn off Chrome's leaked-password dialog, which swallows clicks after login with `secret_sauce` |
-| `framework/jev_local.py` | three targeted patches of the pinned jev-ultrafast commit | see below |
+| `framework/jev_local.py` | four targeted patches of the pinned jev-ultrafast commit | see below |
 
 ### jev-ultrafast patches (`framework/jev_local.py`)
 
@@ -86,6 +86,9 @@ If the code changed after a re-pin, the run fails with a clear error instead of 
 2. `type=password` fields become visible to the agent: upstream hides them twice, which makes login impossible (PR #123).
 3. `TEXT_MODEL_REASONING=none` is also sent as `{"effort": "none"}`. Otherwise Ollama ignores the reasoning switch
    and gemma "thinks" for up to 9 seconds per field (PR #39).
+4. Identical labels get the name of their own item: saucedemo's six "Add to cart" buttons do not say which product
+   they belong to, so the model picked by position ("Add Bolt T-Shirt" added the Backpack). Now the model sees
+   "Add to cart — Sauce Labs Bolt T-Shirt" and picks it at ~0.83. Our own patch, no upstream PR.
 
 ## Running locally
 
@@ -105,6 +108,7 @@ cp .env.example .env
 uv run pytest -m "not live"            # offline adapter checks, no models needed
 uv run --env-file .env pytest          # everything, in a visible Chrome window
 uv run --env-file .env pytest --headless --record-steps
+uv run --env-file .env pytest -m live --headless --count 3   # every test 3 times, the summary reports pass^3
 ```
 
 If the decision server is not running, the live tests stop before opening the browser with
@@ -122,7 +126,11 @@ If the decision server is not running, the live tests stop before opening the br
 | `CHROME_EXTRA_ARGS` | empty (`--no-sandbox` in Docker) | extra Chrome flags |
 | `CHROME_CDP_PORT` | `9333` | CDP port of the isolated Chrome |
 
-pytest flags: `--headless` (no window), `--record-steps` (a frame after every action; included in the report for failed tests).
+pytest flags: `--headless` (no window), `--record-steps` (a frame after every action; included in the report for failed tests),
+`--count N` (pytest-repeat: every test N times; the summary reports pass^N, the share of tests that passed all N trials,
+as in [τ-bench](https://arxiv.org/abs/2406.12045)). The decision model is deterministic, so repeats catch flakiness
+of the environment (timing, network, browser) and of the text model, not of the decisions: robustness to phrasing
+is checked by varying the goal.
 
 ## Running in Docker
 
@@ -185,6 +193,11 @@ Rules for phrasing goals (found experimentally):
 - a step below `MIN_PROBABILITY` (0.5, `framework/runner.py`) is not executed: the run stops with status `blocked`
   and the reason in `result.error`;
 - the agent's status (`done`) is not a verdict. Check the result on the page or in `localStorage`;
+- check *which* item changed, not how many: `cart-contents == "[4]"`, not a cart badge of "1". A wrong but similar
+  action keeps a count right;
+- form data comes from the `faker` fixture and is written into the goal (`f"enter first name {first}"`), then checked
+  in the fields. The text model only puts given values into fields: it never invents personal data and stops
+  with an error instead. Faker's plugin seeds every test with 0, so `conftest.py` sets a random `faker_seed`;
 - prepare preconditions that the test does not verify without the agent (e.g. the `logged_in` fixture sets a cookie).
 
 ## Report
@@ -196,7 +209,7 @@ Passwords are masked. With `--record-steps`, failed tests also get a frame after
 Raw data for every run is in `reports/artifacts/<test>/run-N/run.json`.
 A step stopped by the confidence threshold is shown as the agent error, with its probability.
 
-![HTML report, test_low_confidence_step_is_not_executed: "Add to cart" is executed, the next choice "View details" at probability 0.179 is stopped by the threshold](docs/media/report.png)
+![HTML report, test_low_confidence_step_is_not_executed: the ambiguous goal "Add a T-shirt to the cart." is stopped by the threshold at probability 0.119, nothing is executed](docs/media/report.png)
 
 <details>
 <summary>Full card of <code>test_full_checkout</code>: six goals in one tab</summary>
@@ -221,8 +234,11 @@ In the Linux container torch runs some operations as Triton kernels, which makes
   Chrome paths, the CUDA-only torch index and the GPU reservation in `compose.yaml` are Windows/NVIDIA-specific.
 - No CI: the live tests need an NVIDIA GPU, which standard GitHub-hosted runners do not have
   (GPU runners require a paid Team/Enterprise plan). The suite runs locally or in local Docker.
-- The confidence threshold (0.5) is tuned on saucedemo, where every intended step scores 0.74 or higher;
+- The confidence threshold (0.5) is tuned on saucedemo, where every intended step scores 0.81 or higher;
   another site may need a different value.
+- The agent only sees the browser window and rarely scrolls. For an item below it, the model may confidently open the
+  item's page or answer DONE instead of scrolling to its button. The threshold does not catch a confident choice;
+  the page assertion does.
 - jev-ultrafast is an MVP: shadow DOM, iframes, file uploads and pop-up windows are not supported.
 - Goals are written for the model, not for a human. That is the price of a 322M model deciding in tens of milliseconds.
 

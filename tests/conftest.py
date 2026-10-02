@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import random
 import re
 import urllib.request
 from html import escape
@@ -57,6 +58,13 @@ def site(chrome):
 def logged_in(chrome, site):
     """Precondition without the agent: saucedemo keeps its session in this cookie."""
     chrome.set_cookie(name="session-username", value="standard_user", domain="www.saucedemo.com", path="/")
+
+
+@pytest.fixture(autouse=True)
+def faker_seed():
+    """Faker's pytest plugin seeds every test with 0: the same data in every run, which stops finding bugs.
+    The plugin only reads this fixture when it is autouse. The values go into the goal, so the report shows them."""
+    return random.randrange(2**32)
 
 
 @pytest.fixture(scope="session")
@@ -176,6 +184,8 @@ def pytest_html_results_table_row(report, cells):
 
 
 def pytest_terminal_summary(terminalreporter, config):
+    if (k := config.getoption("count", 1)) > 1:
+        _pass_hat_k(terminalreporter, k)
     runs = config.stash.get(RUNS, [])
     if not runs:
         return
@@ -185,6 +195,23 @@ def pytest_terminal_summary(terminalreporter, config):
         terminalreporter.write_line(
             f"{name:40} {r.status:8} {len(r.steps):>7} {r.elapsed_ms:>9} {r.avg_decision_ms:>16}"
         )
+
+
+def _pass_hat_k(terminalreporter, k):
+    """pass^k (τ-bench): a test counts only if all k trials passed. pytest-repeat names trials test[1-3], test[2-3]"""
+    trials = {}
+    for reports in terminalreporter.stats.values():
+        for report in reports:
+            if isinstance(report, pytest.TestReport):  # setup, call and teardown must all pass
+                trials[report.nodeid] = trials.get(report.nodeid, True) and report.passed
+    tests = {}
+    for nodeid, passed in trials.items():
+        tests.setdefault(re.sub(r"\[\d+-\d+\]$", "", nodeid), []).append(passed)
+    terminalreporter.section(f"pass^{k}")
+    for name, passed in tests.items():
+        terminalreporter.write_line(f"{name:72} {sum(passed)}/{len(passed)}")
+    reliable = sum(all(passed) for passed in tests.values())
+    terminalreporter.write_line(f"pass^{k}: {reliable}/{len(tests)} tests passed all {k} trials")
 
 
 def _steps_html(number, result):

@@ -10,8 +10,8 @@ from jev_ultrafast.browser import StalePage
 
 SECRET_FIELD = re.compile("password", re.IGNORECASE)
 INTERACTIVE = {"click", "fill", "select"}
-# The agent stops instead of acting on a less likely choice. On saucedemo every intended step scores 0.74 or higher;
-# the one unintended click ("View details" after "Add to cart") scores 0.18.
+# The agent stops instead of acting on a less likely choice. On saucedemo every intended step scores 0.81 or higher;
+# an ambiguous goal ("Add a T-shirt" with two T-shirts for sale) tops out at 0.12.
 MIN_PROBABILITY = 0.5
 
 

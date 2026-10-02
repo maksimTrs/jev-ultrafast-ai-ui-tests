@@ -27,17 +27,16 @@ def test_add_backpack_to_cart(jev, logged_in):
 
 
 def test_low_confidence_step_is_not_executed(jev, logged_in):
-    # After "Add to cart" the model's next choice is "View details" at ~0.18, below MIN_PROBABILITY.
-    # Here the agent's own stop is what is checked, so its status is part of the verdict.
-    result, page = jev.start("/inventory.html", "Add Sauce Labs Backpack to the cart.", max_actions=4)
+    # Two T-shirts are for sale, so the goal is ambiguous: the model spreads its choice (~0.12 at best) below
+    # MIN_PROBABILITY. Here the agent's own stop is what is checked, so its status is part of the verdict.
+    result, page = jev.start("/inventory.html", "Add a T-shirt to the cart.", max_actions=4)
 
     assert result.status == "blocked", result.outcome
     assert result.error.startswith("probability "), result.outcome
-    assert page.evaluate("location.pathname") == "/inventory.html"  # "View details" was not clicked
-    assert page.evaluate("localStorage.getItem('cart-contents')") == "[4]"
+    assert page.evaluate("localStorage.getItem('cart-contents')") is None  # nothing was added
 
 
-def test_full_checkout(jev):
+def test_full_checkout(jev, faker):
     result, page = jev.start("/", LOGIN, max_actions=6)
     assert page.evaluate("location.pathname") == "/inventory.html", result.outcome
 
@@ -48,9 +47,12 @@ def test_full_checkout(jev):
     result, page = jev.then("Click the shopping cart.", max_actions=3)
     assert page.evaluate("location.pathname") == "/cart.html", result.outcome
 
-    goal = "Click Checkout, then enter first name John, last name Doe and postal code 12345."
+    first, last, postal = faker.first_name(), faker.last_name(), faker.postcode()
+    goal = f"Click Checkout, then enter first name {first}, last name {last} and postal code {postal}."
     result, page = jev.then(goal, max_actions=6)
     assert page.evaluate("location.pathname") == "/checkout-step-one.html", result.outcome
+    typed = page.evaluate("['first-name', 'last-name', 'postal-code'].map(id => document.getElementById(id).value)")
+    assert typed == [first, last, postal], result.outcome
 
     # After the last field the model answers DONE rather than submitting, so submitting is its own goal.
     result, page = jev.then("Click Continue.", max_actions=3)
