@@ -63,11 +63,16 @@ class Chrome:
             "about:blank",
         ]
         self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.version = self._wait_for_cdp()
-        startup_tabs = self._page_ids()
-        ensure_daemon()  # the harness daemon relays every cdp() call to this browser; it opens its own tab
-        for target_id in startup_tabs:  # the launch tab is unused: agents open their own
-            cdp("Target.closeTarget", targetId=target_id)
+        try:
+            self.version = self._wait_for_cdp()
+            startup_tabs = self._page_ids()
+            ensure_daemon()  # the harness daemon relays every cdp() call to this browser; it opens its own tab
+            for target_id in startup_tabs:  # the launch tab is unused: agents open their own
+                cdp("Target.closeTarget", targetId=target_id)
+        except BaseException:
+            # The session fixture never yields, so nothing else closes it: a Chrome left running keeps the port.
+            self.close()
+            raise
 
     def _wait_for_cdp(self, timeout=20):
         deadline = time.monotonic() + timeout
@@ -79,7 +84,6 @@ class Chrome:
                     return json.load(response)["Browser"]
             except OSError:
                 time.sleep(0.2)
-        self.close()
         raise RuntimeError(f"Chrome CDP did not open on port {CDP_PORT} within {timeout}s")
 
     def _page_ids(self):

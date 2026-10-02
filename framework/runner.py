@@ -13,6 +13,11 @@ INTERACTIVE = {"click", "fill", "select"}
 # The agent stops instead of acting on a less likely choice. On saucedemo every intended step scores 0.81 or higher;
 # an ambiguous goal ("Add a T-shirt" with two T-shirts for sale) tops out at 0.12.
 MIN_PROBABILITY = 0.5
+# Agent.state of the pinned jev-ultrafast: continue_goal resets each key by hand and _tick mirrors its tick.
+STATE_KEYS = {
+    "browser", "goal", "page", "decision", "history", "status", "plan", "plan_index",
+    "decisions", "text_calls", "elapsed_ms", "started_at", "record",
+}  # fmt: skip
 
 
 @dataclass
@@ -43,7 +48,11 @@ def start_goal(url, goal, *, max_actions, record_dir=None):
     agent = Agent(url, goal, record_dir=record_dir)
     # jev opens its tab in the background: bring it forward so a headed run shows the test,
     # and so headless Chrome paints it (a background tab may never render a screenshot).
-    agent.browser.call("Page.bringToFront")
+    try:
+        agent.browser.call("Page.bringToFront")
+    except BaseException:
+        agent.close()  # the caller never gets this agent, so nothing else would close its tab
+        raise
     return _drive(agent, goal, max_actions), agent
 
 
@@ -53,6 +62,8 @@ def continue_goal(agent, goal, *, max_actions, record_dir=None):
     The decision model stops after typing into the last field of a form, so submitting it is a separate goal,
     which only works if the form keeps its values.
     """
+    if set(agent.state) != STATE_KEYS:
+        raise RuntimeError("jev_ultrafast Agent.state changed; review continue_goal and _tick before re-pinning")
     agent.state.update(
         goal=goal, plan=[goal], plan_index=0, history=[], decisions=[], text_calls=[],
         decision=None, status="ready", started_at=None, elapsed_ms=0, record=bool(record_dir),

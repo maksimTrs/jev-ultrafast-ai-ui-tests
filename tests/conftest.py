@@ -4,6 +4,7 @@ import os
 import random
 import re
 import shutil
+import urllib.error
 import urllib.request
 from html import escape
 from pathlib import Path
@@ -17,6 +18,8 @@ from framework.chrome import Chrome
 from framework.runner import continue_goal, start_goal
 
 jev_local.install()
+
+pytest_plugins = ["pytester"]  # test_model_fixtures.py runs this conftest in an inner session
 
 SAUCEDEMO = "https://www.saucedemo.com"
 ARTIFACTS = Path(__file__).resolve().parents[1] / "reports" / "artifacts"
@@ -75,13 +78,14 @@ def decision_model():
     try:
         urllib.request.urlopen(url, timeout=5).close()
         return
+    except urllib.error.HTTPError as exc:  # an OSError too, but something is up there: starting it is the wrong hint
+        message = f"Decision server at {url} answered HTTP {exc.code}. Check LAYA_URL and the server's output."
     except OSError as exc:
-        error = exc  # failing outside the except keeps the chained traceback out of the report
-    pytest.fail(
-        f"Decision server not reachable at {url} ({error}). Start it in another terminal: "
-        "uv run --project services/decision python services/decision/serve.py",
-        pytrace=False,
-    )
+        message = (
+            f"Decision server not reachable at {url} ({exc}). Start it in another terminal: "
+            "uv run --project services/decision python services/decision/serve.py"
+        )
+    pytest.fail(message, pytrace=False)  # failing outside the except keeps the chained traceback out of the report
 
 
 @pytest.fixture(scope="session")
@@ -90,14 +94,21 @@ def text_model():
     a load when the client disconnects) and the load time would skew the measurements."""
     if missing := [v for v in ("TEXT_MODEL_BASE_URL", "TEXT_MODEL", "TEXT_MODEL_API_KEY") if not os.environ.get(v)]:
         pytest.fail(f"{', '.join(missing)} not set. Run with the settings: uv run --env-file .env pytest", pytrace=False)
+    base, model = os.environ["TEXT_MODEL_BASE_URL"].rstrip("/"), os.environ["TEXT_MODEL"]
     request = urllib.request.Request(
-        os.environ["TEXT_MODEL_BASE_URL"].rstrip("/") + "/chat/completions",
-        data=json.dumps(
-            {"model": os.environ["TEXT_MODEL"], "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]}
-        ).encode(),
+        base + "/chat/completions",
+        data=json.dumps({"model": model, "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]}).encode(),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {os.environ['TEXT_MODEL_API_KEY']}"},
     )
-    urllib.request.urlopen(request, timeout=300).close()
+    try:
+        urllib.request.urlopen(request, timeout=300).close()
+        return
+    except OSError as exc:  # Ollama answers 404 for a model it has not pulled
+        error = exc
+    pytest.fail(
+        f"Text model {model} not available at {base} ({error}). Start Ollama and pull the model: ollama pull {model}",
+        pytrace=False,
+    )
 
 
 class JevSession:
