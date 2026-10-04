@@ -74,7 +74,7 @@ frameworks are still more reliable. This project is a working template and a tes
 | [cklxx/laya-browser](https://huggingface.co/cklxx/laya-browser) | a fine-tuned [laya](https://github.com/NandhaKishorM/laya) (mmBERT, 322M) speaking Jev's `/v1/systemone` protocol; pinned to revision `645cf366` in `serve.py` (the server code ships with the weights, so the pin fixes both) | a local replacement for Jev; base laya scores ≈ 0% on browser decisions without fine-tuning |
 | Ollama + `gemma4:e4b` | writes the field value when TYPE_TEXT is chosen | OpenAI-compatible API, so jev connects through env variables, no code; models under ~4B parameters confuse the fields |
 | `framework/chrome.py` | a dedicated Chrome: own CDP port, temporary profile, prefs | the user's browser is never touched; the prefs turn off Chrome's leaked-password dialog, which swallows clicks after login with `secret_sauce` |
-| `framework/jev_local.py` | four targeted patches of the pinned jev-ultrafast commit | see below |
+| `framework/jev_local.py` | five targeted patches of the pinned jev-ultrafast commit | see below |
 
 ### jev-ultrafast patches (`framework/jev_local.py`)
 
@@ -88,6 +88,8 @@ If the code changed after a re-pin, the run fails with a clear error instead of 
 4. Identical labels get the name of their own item: saucedemo's six "Add to cart" buttons do not say which product
    they belong to, so the model picked by position ("Add Bolt T-Shirt" added the Backpack). Now the model sees
    "Add to cart — Sauce Labs Bolt T-Shirt" and picks it at ~0.83. Our own patch, no upstream PR.
+5. The text model invents a value the goal does not give: upstream forbids it and answers null. Its requests carry
+   a seed, new every session, so the values change between runs and `TEXT_MODEL_SEED` replays them. Our own patch, no upstream PR.
 
 ## Containing non-determinism
 
@@ -98,15 +100,15 @@ narrow job, and the verdict is plain code.
 |---|---|---|
 | Decision | One forward pass over the observed elements, no sampling: the same page and goal give the same choice | jev-ultrafast |
 | | A malformed answer (unknown element, probabilities not summing to 1, a choice that is not the most likely) executes nothing | `validate_choice`, jev-ultrafast `model.py` |
-| | The text model only fills TYPE_TEXT fields: JSON with a single `text` key; with no value in the goal it returns none and nothing is typed; reasoning off (patch 3) | jev-ultrafast `model.py` |
+| | The text model only fills TYPE_TEXT fields: JSON with a single `text` key; a value from the goal is used as is, a missing one is invented (patch 5); reasoning off (patch 3). The session's seed is in the report, `TEXT_MODEL_SEED=<seed>` replays its values | jev-ultrafast `model.py`, `jev_local.py` |
 | Before an action | Confidence threshold: a step with P(operation) × P(target) below 0.5 is not executed, status `blocked`, the reason in `result.error`. A product, because a sure target with an unsure operation is still a doubtful step (0.45 × 0.99) | `_tick`, `framework/runner.py` |
 | | An action runs only on the page it was chosen for: a changed page fingerprint raises `StalePage` and the agent decides again. A decision is consumed once, so a retry cannot double-click | jev-ultrafast `agent.py` |
 | | The first decision waits for the page to have controls: on an empty page the model answers DONE | `_wait_for_controls`, `runner.py` |
 | | Bounds: `max_actions` per goal (status `budget`); three actions in a row that change nothing stop the run (`blocked`) | `runner.py`, jev-ultrafast `agent.py` |
 | Input | Duplicate labels get their item's name (patch 4); short goals, preconditions without the agent ([rules](#writing-a-test)); isolated Chrome, clean origin before every test | `jev_local.py`, `chrome.py`, `conftest.py` |
-| Verdict | An `assert` on the real DOM or `localStorage`, never the agent's status; exact state, random Faker data ([rules](#writing-a-test)). `test_low_confidence_step_is_not_executed` checks the threshold itself | `tests/` |
+| Verdict | An `assert` on the real DOM or `localStorage`, never the agent's status; exact state, invented values checked in the fields ([rules](#writing-a-test)). `test_low_confidence_step_is_not_executed` checks the threshold itself | `tests/` |
 | Pins | jev-ultrafast commit, laya revision, Ollama 0.35.0 in Docker; the patches and the `Agent.state` keys fail loudly when a re-pin changes the code under them | `pyproject.toml`, `serve.py`, `jev_local.py`, `runner.py` |
-| Measurement | `--count N` reports pass^N. Repeats measure the environment (timing, network, browser) and the text model, not the decisions; robustness to phrasing needs varied goals, which the suite does not cover yet. Every step's probability is in the [report](#report) | `conftest.py` |
+| Measurement | `--count N` reports pass^N. Repeats measure the environment (timing, network, browser), not the decisions or the typed values (one seed per session); robustness to phrasing needs varied goals, which the suite does not cover yet. Every step's probability is in the [report](#report) | `conftest.py` |
 
 ## Running locally
 
@@ -140,6 +142,7 @@ If the decision server is not running, the live tests stop before opening the br
 | `DECISION_HOST`, `DECISION_PORT` | `127.0.0.1` (`0.0.0.0` in Docker), `8791` | where `serve.py` listens; change `LAYA_URL` to match |
 | `TEXT_MODEL_BASE_URL`, `TEXT_MODEL`, `TEXT_MODEL_API_KEY` | Ollama, `gemma4:e4b`, `ollama` | any OpenAI-compatible endpoint for TYPE_TEXT |
 | `TEXT_MODEL_REASONING` | `none` | turns off the text model's "thinking" |
+| `TEXT_MODEL_SEED` | random per session | replays the values a session typed (the seed is in the report) |
 | `CHROME_PATH` | standard Chrome/Chromium locations | a custom browser binary |
 | `CHROME_EXTRA_ARGS` | empty (`--no-sandbox` in Docker) | extra Chrome flags |
 | `CHROME_CDP_PORT` | `9333` | CDP port of the isolated Chrome |
@@ -209,9 +212,9 @@ Rules for phrasing goals (found experimentally):
 - the agent's status (`done`) is not a verdict. Check the result on the page or in `localStorage`;
 - check *which* item changed, not how many: `cart-contents == "[4]"`, not a cart badge of "1". A wrong but similar
   action keeps a count right;
-- form data comes from the `faker` fixture and is written into the goal (`f"enter first name {first}"`), then checked
-  in the fields. The text model only puts given values into fields: it never invents personal data and stops
-  with an error instead. Faker's plugin seeds every test with 0, so `conftest.py` sets a random `faker_seed`;
+- name the fields, not the values ("enter first name, last name and postal code"): the text model invents them,
+  and the test checks that every field holds what the agent typed (`result.steps`). Values the test depends on,
+  like the login, go into the goal and are typed as given;
 - prepare preconditions that the test does not verify without the agent (e.g. the `logged_in` fixture sets a cookie).
 
 ## Report

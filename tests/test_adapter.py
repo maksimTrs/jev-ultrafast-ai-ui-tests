@@ -79,4 +79,15 @@ def test_disabled_reasoning_reaches_ollama(monkeypatch):
     sent = []
     monkeypatch.setattr(model.CLIENT, "post", lambda url, json, **_: sent.append(json) or Response())
     model.post_json("http://127.0.0.1:11434/v1/chat/completions", "key", {"reasoning": {"enabled": False}})
-    assert sent == [{"reasoning": {"effort": "none"}}]
+    assert sent[0]["reasoning"] == {"effort": "none"}
+
+
+def test_text_requests_carry_the_session_seed(monkeypatch):
+    sent = []
+    monkeypatch.setattr(model.CLIENT, "post", lambda url, json, **_: sent.append(json) or Response())
+    model.post_json("http://127.0.0.1:11434/v1/chat/completions", "key", {})
+    assert sent == [{"seed": int(os.environ["TEXT_MODEL_SEED"])}]
+
+
+def test_text_model_invents_values_the_goal_does_not_give():
+    assert "Never invent" not in model.TEXT_VALUE and "invent a realistic test value" in model.TEXT_VALUE

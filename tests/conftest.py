@@ -1,7 +1,6 @@
 import base64
 import json
 import os
-import random
 import re
 import shutil
 import urllib.error
@@ -38,9 +37,14 @@ def pytest_configure(config):
         {
             "Decision model": f"laya-browser @ {os.environ.get('LAYA_URL', 'http://127.0.0.1:8791')}",
             "Text model": f"{os.environ.get('TEXT_MODEL', '-')} @ {os.environ.get('TEXT_MODEL_BASE_URL', '-')}",
+            "Text model seed": os.environ["TEXT_MODEL_SEED"],
             "Mode": f"{os.environ.get('RUN_MODE', 'local')}, {'headless' if headless else 'headed'}",
         }
     )
+
+
+def pytest_report_header():
+    return f"text model seed: {os.environ['TEXT_MODEL_SEED']} (TEXT_MODEL_SEED={os.environ['TEXT_MODEL_SEED']} replays it)"
 
 
 @pytest.fixture(scope="session")
@@ -62,13 +66,6 @@ def site(chrome):
 def logged_in(chrome, site):
     """Precondition without the agent: saucedemo keeps its session in this cookie."""
     chrome.set_cookie(name="session-username", value="standard_user", domain="www.saucedemo.com", path="/")
-
-
-@pytest.fixture(autouse=True)
-def faker_seed():
-    """Faker's pytest plugin seeds every test with 0: the same data in every run, which stops finding bugs.
-    The plugin only reads this fixture when it is autouse. The values go into the goal, so the report shows them."""
-    return random.randrange(2**32)
 
 
 @pytest.fixture(scope="session")
