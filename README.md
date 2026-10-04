@@ -160,6 +160,9 @@ docker compose run --rm tests -m live --headless           # no display
 docker compose down                                        # stop decision and ollama
 ```
 
+To watch, open the link as soon as it is printed and press Connect: a run takes ~20 s, add `-m live --count 3`
+to watch longer. Without `--service-ports` the noVNC port is not published.
+
 `tests` starts `decision` and `ollama` on its own. The `ollama-init` service downloads the model into a volume once.
 The report appears on the host in `./reports` (bind mount): it stays after `--rm` and `docker compose down -v`. Only noVNC is published, and only on `127.0.0.1`.
 Requires an NVIDIA GPU: `compose.yaml` reserves one for `decision` and `ollama`.
