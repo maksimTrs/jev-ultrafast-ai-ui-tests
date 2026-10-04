@@ -51,11 +51,10 @@ What makes it promising:
 - **No locators.** A test describes user intent, not DOM structure, so there are no selectors to maintain.
   Expected (not measured in this experiment): such tests are more robust to markup changes and more sensitive to changes
   in visible text, since the model sees the page the way a user does.
-- **Choosing instead of generating.** The model cannot invent a selector or click a non-existent button:
-  every action is an element from the page snapshot, re-validated right before execution.
+- **Choosing instead of generating.** The model cannot invent a selector or click a non-existent button.
 - **Speed and cost.** Tens of milliseconds per decision on a local GPU, no per-token billing.
-- **Measurable confidence.** Every decision carries a probability: the agent stops before a doubtful step instead of
-  taking it, and every probability is in the report.
+- **Measurable confidence.** Every decision carries a probability, and the agent stops before a doubtful step
+  (see [Containing non-determinism](#containing-non-determinism)).
 
 The downsides, honestly: goals have to be phrased for the model, long scenarios have to be split into steps,
 and on ambiguous pages the model sometimes wants an extra action: the confidence threshold stops it, it does not
@@ -89,6 +88,25 @@ If the code changed after a re-pin, the run fails with a clear error instead of 
 4. Identical labels get the name of their own item: saucedemo's six "Add to cart" buttons do not say which product
    they belong to, so the model picked by position ("Add Bolt T-Shirt" added the Backpack). Now the model sees
    "Add to cart — Sauce Labs Bolt T-Shirt" and picks it at ~0.83. Our own patch, no upstream PR.
+
+## Containing non-determinism
+
+Randomness is kept away from what decides the verdict: the decision model does not sample, the generative LLM has one
+narrow job, and the verdict is plain code.
+
+| Layer | Technique | Where |
+|---|---|---|
+| Decision | One forward pass over the observed elements, no sampling: the same page and goal give the same choice | jev-ultrafast |
+| | A malformed answer (unknown element, probabilities not summing to 1, a choice that is not the most likely) executes nothing | `validate_choice`, jev-ultrafast `model.py` |
+| | The text model only fills TYPE_TEXT fields: JSON with a single `text` key; with no value in the goal it returns none and nothing is typed; reasoning off (patch 3) | jev-ultrafast `model.py` |
+| Before an action | Confidence threshold: a step with P(operation) × P(target) below 0.5 is not executed, status `blocked`, the reason in `result.error`. A product, because a sure target with an unsure operation is still a doubtful step (0.45 × 0.99) | `_tick`, `framework/runner.py` |
+| | An action runs only on the page it was chosen for: a changed page fingerprint raises `StalePage` and the agent decides again. A decision is consumed once, so a retry cannot double-click | jev-ultrafast `agent.py` |
+| | The first decision waits for the page to have controls: on an empty page the model answers DONE | `_wait_for_controls`, `runner.py` |
+| | Bounds: `max_actions` per goal (status `budget`); three actions in a row that change nothing stop the run (`blocked`) | `runner.py`, jev-ultrafast `agent.py` |
+| Input | Duplicate labels get their item's name (patch 4); short goals, preconditions without the agent ([rules](#writing-a-test)); isolated Chrome, clean origin before every test | `jev_local.py`, `chrome.py`, `conftest.py` |
+| Verdict | An `assert` on the real DOM or `localStorage`, never the agent's status; exact state, random Faker data ([rules](#writing-a-test)). `test_low_confidence_step_is_not_executed` checks the threshold itself | `tests/` |
+| Pins | jev-ultrafast commit, laya revision, Ollama 0.35.0 in Docker; the patches and the `Agent.state` keys fail loudly when a re-pin changes the code under them | `pyproject.toml`, `serve.py`, `jev_local.py`, `runner.py` |
+| Measurement | `--count N` reports pass^N. Repeats measure the environment (timing, network, browser) and the text model, not the decisions; robustness to phrasing needs varied goals, which the suite does not cover yet. Every step's probability is in the [report](#report) | `conftest.py` |
 
 ## Running locally
 
@@ -128,9 +146,7 @@ If the decision server is not running, the live tests stop before opening the br
 
 pytest flags: `--headless` (no window), `--record-steps` (a frame after every action; included in the report for failed tests),
 `--count N` (pytest-repeat: every test N times; the summary reports pass^N, the share of tests that passed all N trials,
-as in [τ-bench](https://arxiv.org/abs/2406.12045)). The decision model is deterministic, so repeats catch flakiness
-of the environment (timing, network, browser) and of the text model, not of the decisions: robustness to phrasing
-is checked by varying the goal.
+as in [τ-bench](https://arxiv.org/abs/2406.12045); what repeats do and do not catch: [Containing non-determinism](#containing-non-determinism)).
 
 ## Running in Docker
 
@@ -190,8 +206,6 @@ Rules for phrasing goals (found experimentally):
 - submit a form as a separate goal after typing (`then("Click Continue.")`);
 - set `max_actions` slightly above the minimum needed: extra steps show up in the report, and a loop stops
   with status `budget`;
-- a step below `MIN_PROBABILITY` (0.5, `framework/runner.py`) is not executed: the run stops with status `blocked`
-  and the reason in `result.error`;
 - the agent's status (`done`) is not a verdict. Check the result on the page or in `localStorage`;
 - check *which* item changed, not how many: `cart-contents == "[4]"`, not a cart badge of "1". A wrong but similar
   action keeps a count right;
