@@ -91,3 +91,4 @@ def test_text_requests_carry_the_session_seed(monkeypatch):
 
 def test_text_model_invents_values_the_goal_does_not_give():
     assert "Never invent" not in model.TEXT_VALUE and "invent a realistic test value" in model.TEXT_VALUE
+    assert "never use placeholders" in model.TEXT_VALUE

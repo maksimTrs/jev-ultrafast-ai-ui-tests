@@ -88,7 +88,8 @@ If the code changed after a re-pin, the run fails with a clear error instead of 
 4. Identical labels get the name of their own item: saucedemo's six "Add to cart" buttons do not say which product
    they belong to, so the model picked by position ("Add Bolt T-Shirt" added the Backpack). Now the model sees
    "Add to cart — Sauce Labs Bolt T-Shirt" and picks it at ~0.83. Our own patch, no upstream PR.
-5. The text model invents a value the goal does not give: upstream forbids it and answers null. Its requests carry
+5. The text model invents a value the goal does not give: upstream forbids it and answers null. Placeholders are
+   banned, otherwise gemma types "John Doe" almost every time. Its requests carry
    a seed, new every session, so the values change between runs and `TEXT_MODEL_SEED` replays them. Our own patch, no upstream PR.
 
 ## Containing non-determinism

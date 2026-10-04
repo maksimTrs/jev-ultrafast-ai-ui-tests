@@ -47,10 +47,12 @@ CONTEXT_PATCH = {
 # Upstream disables reasoning in OpenRouter's form; Ollama ignores it and needs the OpenAI-style effort.
 REASONING_OFF = {"enabled": False}
 # Upstream answers null when the goal has no value; "fill in the form" leaves the values to the model.
+# Without the placeholder ban gemma types "John Doe" in 7 of 8 seeds.
 TEXT_VALUE_PATCHES = {
     " Never invent personal information.": "",
     'If a required value is missing, return {"text": null}. Otherwise return': (
-        "If the goal gives no value, invent a realistic test value for the field. Return"
+        "If the goal gives no value, invent a realistic test value for the field. Vary invented values: "
+        "never use placeholders such as John, Jane, Doe, Smith, 12345 or 90210. Return"
     ),
 }
 
