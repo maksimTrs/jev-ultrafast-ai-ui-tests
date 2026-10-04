@@ -238,17 +238,16 @@ A step stopped by the confidence threshold is shown as the agent error, with its
 
 ## Results (RTX 4090 Laptop)
 
-All tests passed 3 out of 3 locally. In Docker they did before the text model started inventing form values
-(patch 5) and have not been rerun since. Decision model latency, per decision:
+All tests passed 3 out of 3 (`--count 3`), locally and in Docker.
 
-| Local (Windows) | Docker (Linux) |
-|---|---|
-| 40–150 ms | 25–40 ms |
+| | Local (Windows) | Docker (Linux) |
+|---|---|---|
+| Decision model, per decision | 40–150 ms | 25–40 ms |
+| Text model, per field | 100–190 ms | 110–350 ms |
+| Agent time, whole live suite (models warm) | ~5 s | ~3 s |
 
 In the Linux container torch runs some operations as Triton kernels, which makes decisions 2–4× faster than on Windows.
-
-Locally the text model takes 100–190 ms per field, and the agent spends about 5 s on the whole live suite,
-over half of it in the browser (actions, waiting for the page to settle) rather than in the models.
+Locally over half of the agent time goes to the browser (actions, waiting for the page to settle), not to the models.
 
 ## Limitations
 
