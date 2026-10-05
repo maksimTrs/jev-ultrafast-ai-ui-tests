@@ -1,6 +1,6 @@
 
 
-https://github.com/user-attachments/assets/ebff5e4e-d948-4513-b849-a853038ab8e6
+
 
 # jev-ultrafast AI Framework for UI Tests
 
