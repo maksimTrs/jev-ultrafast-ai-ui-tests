@@ -1,11 +1,3 @@
-
-
-https://github.com/user-attachments/assets/6a466c0d-6240-47f8-9c8e-3f8567e7c385
-
-
-
-
-
 # jev-ultrafast AI Framework for UI Tests
 
 Selector-free UI tests for [saucedemo.com](https://www.saucedemo.com/): a test states a goal in natural language,
@@ -13,6 +5,8 @@ and a "System 1" decision model (one forward pass, no text generation) picks the
 The verdict comes from a deterministic check of the real DOM, not from the model.
 
 Everything runs locally: no cloud TypeSafe Jev, no external LLM APIs.
+
+https://github.com/user-attachments/assets/6a466c0d-6240-47f8-9c8e-3f8567e7c385
 
 
 > [!WARNING]
