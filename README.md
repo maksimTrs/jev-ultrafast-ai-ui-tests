@@ -92,10 +92,12 @@ If the code changed after a re-pin, the run fails with a clear error instead of 
 5. The text model invents a value the goal does not give: upstream forbids it and answers null. Placeholders are
    banned, otherwise gemma types "John Doe" almost every time. Its requests carry
    a seed, new every session, so the values change between runs and `TEXT_MODEL_SEED` replays them. Our own patch, no upstream PR.
-6. `TEXT_SOURCE=faker` replaces the text model where none can run (CPU-only CI): a value the goal gives
-   ("username standard_user") is typed as written, a field the goal only names gets a [Faker](https://faker.readthedocs.io/)
-   value by its label, an unknown field fails the step with a clear error. Faker is seeded with `TEXT_MODEL_SEED`.
-   Our own patch, no upstream PR.
+6. `TEXT_SOURCE=faker` replaces the text model where none can run (CPU-only CI). A value the goal gives is typed
+   as written, but only when it directly follows the field's label: "username standard_user" works,
+   "log in as standard_user" does not. A field the goal only names gets a [Faker](https://faker.readthedocs.io/) value
+   if its label is in `FAKE_VALUES` (first name, last name, postal code); a new kind of field goes there.
+   Any other field fails the step with `TEXT_SOURCE=faker has no value for '<label>'`. Faker is seeded with
+   `TEXT_MODEL_SEED`. Our own patch, no upstream PR.
 
 ## Containing non-determinism
 
@@ -118,8 +120,8 @@ narrow job, and the verdict is plain code.
 
 ## Running locally
 
-Requires [uv](https://docs.astral.sh/uv/), Chrome, Ollama (tested with 0.35.0; desktop app or CLI, same server)
-and an NVIDIA GPU (CPU works too, but slower).
+Requires [uv](https://docs.astral.sh/uv/), Chrome, Ollama (tested with 0.35.0; desktop app or CLI, same server;
+not needed with `TEXT_SOURCE=faker`) and an NVIDIA GPU (CPU works too, but slower).
 
 ```bash
 # 1. decision server: keep it running in a separate terminal
@@ -137,6 +139,7 @@ uv run pytest -m "not live"            # offline adapter checks, no models neede
 uv run --env-file .env pytest          # everything, in a visible Chrome window
 uv run --env-file .env pytest --headless --record-steps
 uv run --env-file .env pytest -m live --headless --count 3   # every test 3 times, the summary reports pass^3
+TEXT_SOURCE=faker uv run pytest --headless   # what CI runs: no Ollama, values from the goal or Faker (patch 6)
 ```
 
 If the decision server is not running, the live tests stop before opening the browser with
@@ -151,7 +154,7 @@ If the decision server is not running, the live tests stop before opening the br
 | `TEXT_MODEL_BASE_URL`, `TEXT_MODEL`, `TEXT_MODEL_API_KEY` | Ollama, `gemma4:e4b`, `ollama` | any OpenAI-compatible endpoint for TYPE_TEXT |
 | `TEXT_MODEL_REASONING` | `none` | turns off the text model's "thinking" |
 | `TEXT_MODEL_SEED` | random per session | replays the values a session typed (the seed is in the report) |
-| `TEXT_SOURCE` | `llm` | `faker`: type values without a text model (patch 6); the `TEXT_MODEL_*` variables are then unused |
+| `TEXT_SOURCE` | `llm` | `faker`: type values without a text model (patch 6); the `TEXT_MODEL_*` variables are then unused. CI sets it in `.github/workflows/ui-tests.yml` |
 | `CHROME_PATH` | standard Chrome/Chromium locations | a custom browser binary |
 | `CHROME_EXTRA_ARGS` | empty (`--no-sandbox` in Docker) | extra Chrome flags |
 | `CHROME_CDP_PORT` | `9333` | CDP port of the isolated Chrome |
@@ -227,6 +230,8 @@ Rules for phrasing goals (found experimentally):
 - name the fields, not the values ("enter first name, last name and postal code"): the text model invents them,
   and the test checks that every field holds what the agent typed (`result.steps`). Values the test depends on,
   like the login, go into the goal and are typed as given;
+- CI types with Faker, not gemma: write a value right after its field ("username standard_user") and add a new kind
+  of field to `FAKE_VALUES` ([patch 6](#jev-ultrafast-patches-frameworkjev_localpy)), or the test passes locally and fails in CI;
 - prepare preconditions that the test does not verify without the agent (e.g. the `logged_in` fixture sets a cookie).
 
 ## Report
