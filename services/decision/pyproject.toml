@@ -5,17 +5,32 @@ description = "Local TypeSafe-compatible /v1/systemone endpoint backed by the fi
 requires-python = ">=3.12"
 dependencies = [
     "laya==0.3.23",
-    "torch==2.14.1",
     "huggingface_hub>=0.20",
 ]
 
+# torch comes from one of two groups: CUDA by default, CPU for machines without an NVIDIA GPU (CI runners):
+# uv run --no-default-groups --group cpu ...
+[dependency-groups]
+cu126 = ["torch==2.14.1"]
+cpu = ["torch==2.14.1"]
+
 [tool.uv]
 package = false
+default-groups = ["cu126"]
+conflicts = [[{ group = "cu126" }, { group = "cpu" }]]
 
 [tool.uv.sources]
-torch = { index = "pytorch-cu126" }
+torch = [
+    { index = "pytorch-cu126", group = "cu126" },
+    { index = "pytorch-cpu", group = "cpu" },
+]
 
 [[tool.uv.index]]
 name = "pytorch-cu126"
 url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
 explicit = true

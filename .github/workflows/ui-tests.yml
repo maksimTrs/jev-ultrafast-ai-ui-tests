@@ -1,0 +1,65 @@
+# The whole suite on a CPU-only GitHub runner: laya-browser on CPU torch, Faker instead of the text model.
+name: UI tests (CPU)
+
+on:
+  push:
+    branches: [ci/cpu-faker-text]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TEXT_SOURCE: faker
+      LAYA_URL: http://127.0.0.1:8791
+      RUN_MODE: ci
+      # Both commands select the CPU torch; without the flags uv run would sync back to the default CUDA group.
+      DECISION_UV: --project services/decision --frozen --no-default-groups --group cpu
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.11.19"
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      # serve.py pins the laya-browser revision, so a re-pin downloads the new weights.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/huggingface
+          key: laya-browser-${{ hashFiles('services/decision/serve.py') }}
+
+      - name: Start the decision server
+        run: |
+          uv sync $DECISION_UV
+          mkdir -p reports
+          nohup uv run $DECISION_UV python services/decision/serve.py > reports/decision.log 2>&1 &
+
+      - name: Install test dependencies
+        run: uv sync --frozen
+
+      - name: Wait for the decision server
+        run: |
+          for _ in $(seq 120); do
+            curl -sf -o /dev/null http://127.0.0.1:8791/ && exit 0
+            sleep 5
+          done
+          cat reports/decision.log
+          exit 1
+
+      - name: Run tests
+        run: uv run --frozen pytest --headless
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: report
+          path: reports/
