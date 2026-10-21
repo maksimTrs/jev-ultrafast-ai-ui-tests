@@ -1,5 +1,8 @@
 # jev-ultrafast AI Framework for UI Tests
 
+[![UI tests (CPU)](https://github.com/maksimTrs/jev-ultrafast-ai-ui-tests/actions/workflows/ui-tests.yml/badge.svg?branch=main)](https://github.com/maksimTrs/jev-ultrafast-ai-ui-tests/actions/workflows/ui-tests.yml?query=branch%3Amain)
+[![Test report](https://img.shields.io/badge/report-latest%20main%20run-blue)](https://maksimtrs.github.io/jev-ultrafast-ai-ui-tests/)
+
 Selector-free UI tests for [saucedemo.com](https://www.saucedemo.com/): a test states a goal in natural language,
 and a "System 1" decision model (one forward pass, no text generation) picks the operation and the page element.
 The verdict comes from a deterministic check of the real DOM, not from the model.
