@@ -20,6 +20,9 @@ jobs:
       TEXT_SOURCE: faker
       LAYA_URL: http://127.0.0.1:8791
       RUN_MODE: ci
+      # The image's /usr/bin/chromium aborts: Ubuntu 24.04 restricts unprivileged user namespaces, and only the
+      # Google Chrome package brings an AppArmor profile that lets its sandbox start.
+      CHROME_PATH: /usr/bin/google-chrome
       # Both commands select the CPU torch; without the flags uv run would sync back to the default CUDA group.
       DECISION_UV: --project services/decision --frozen --no-default-groups --group cpu
     steps:
