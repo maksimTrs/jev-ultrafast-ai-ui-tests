@@ -20,6 +20,7 @@ def test_unreachable_text_model_says_how_to_start_it(pytester, monkeypatch):
         monkeypatch.setenv("TEXT_MODEL_BASE_URL", f"http://127.0.0.1:{free.getsockname()[1]}/v1")
     monkeypatch.setenv("TEXT_MODEL", "gemma4:e4b")
     monkeypatch.setenv("TEXT_MODEL_API_KEY", "ollama")
+    monkeypatch.setenv("TEXT_SOURCE", "llm")  # CI runs with faker, which skips the text model check
 
     result = run_test_needing(pytester, "text_model")
 

@@ -33,10 +33,11 @@ def pytest_addoption(parser):
 def pytest_configure(config):
     config.stash[RUNS] = []
     headless = config.getoption("--headless")
+    text_model = f"{os.environ.get('TEXT_MODEL', '-')} @ {os.environ.get('TEXT_MODEL_BASE_URL', '-')}"
     config.stash[metadata_key].update(
         {
             "Decision model": f"laya-browser @ {os.environ.get('LAYA_URL', 'http://127.0.0.1:8791')}",
-            "Text model": f"{os.environ.get('TEXT_MODEL', '-')} @ {os.environ.get('TEXT_MODEL_BASE_URL', '-')}",
+            "Text model": "faker (TEXT_SOURCE=faker)" if os.environ["TEXT_SOURCE"] == "faker" else text_model,
             "Text model seed": os.environ["TEXT_MODEL_SEED"],
             "Mode": f"{os.environ.get('RUN_MODE', 'local')}, {'headless' if headless else 'headed'}",
         }
@@ -44,7 +45,9 @@ def pytest_configure(config):
 
 
 def pytest_report_header():
-    return f"text model seed: {os.environ['TEXT_MODEL_SEED']} (TEXT_MODEL_SEED={os.environ['TEXT_MODEL_SEED']} replays it)"
+    return (
+        f"text model seed: {os.environ['TEXT_MODEL_SEED']} (TEXT_MODEL_SEED={os.environ['TEXT_MODEL_SEED']} replays it)"
+    )
 
 
 @pytest.fixture(scope="session")
@@ -89,8 +92,12 @@ def decision_model():
 def text_model():
     """Loads the text model up front. A cold load takes 20-40 s; jev's 25 s timeout would cancel it (Ollama aborts
     a load when the client disconnects) and the load time would skew the measurements."""
+    if os.environ["TEXT_SOURCE"] == "faker":
+        return
     if missing := [v for v in ("TEXT_MODEL_BASE_URL", "TEXT_MODEL", "TEXT_MODEL_API_KEY") if not os.environ.get(v)]:
-        pytest.fail(f"{', '.join(missing)} not set. Run with the settings: uv run --env-file .env pytest", pytrace=False)
+        pytest.fail(
+            f"{', '.join(missing)} not set. Run with the settings: uv run --env-file .env pytest", pytrace=False
+        )
     base, model = os.environ["TEXT_MODEL_BASE_URL"].rstrip("/"), os.environ["TEXT_MODEL"]
     request = urllib.request.Request(
         base + "/chat/completions",

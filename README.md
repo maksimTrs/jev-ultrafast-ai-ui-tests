@@ -72,7 +72,7 @@ frameworks are still more reliable. This project is a working template and a tes
 | [cklxx/laya-browser](https://huggingface.co/cklxx/laya-browser) | a fine-tuned [laya](https://github.com/NandhaKishorM/laya) (mmBERT, 322M) speaking Jev's `/v1/systemone` protocol; pinned to revision `645cf366` in `serve.py` (the server code ships with the weights, so the pin fixes both) | a local replacement for Jev; base laya scores ≈ 0% on browser decisions without fine-tuning |
 | Ollama + `gemma4:e4b` | writes the field value when TYPE_TEXT is chosen | OpenAI-compatible API, so jev connects through env variables, no code; models under ~4B parameters confuse the fields |
 | `framework/chrome.py` | a dedicated Chrome: own CDP port, temporary profile, prefs | the user's browser is never touched; the prefs turn off Chrome's leaked-password dialog, which swallows clicks after login with `secret_sauce` |
-| `framework/jev_local.py` | five targeted patches of the pinned jev-ultrafast commit | see below |
+| `framework/jev_local.py` | six targeted patches of the pinned jev-ultrafast commit | see below |
 
 ### jev-ultrafast patches (`framework/jev_local.py`)
 
@@ -89,6 +89,10 @@ If the code changed after a re-pin, the run fails with a clear error instead of 
 5. The text model invents a value the goal does not give: upstream forbids it and answers null. Placeholders are
    banned, otherwise gemma types "John Doe" almost every time. Its requests carry
    a seed, new every session, so the values change between runs and `TEXT_MODEL_SEED` replays them. Our own patch, no upstream PR.
+6. `TEXT_SOURCE=faker` replaces the text model where none can run (CPU-only CI): a value the goal gives
+   ("username standard_user") is typed as written, a field the goal only names gets a [Faker](https://faker.readthedocs.io/)
+   value by its label, an unknown field fails the step with a clear error. Faker is seeded with `TEXT_MODEL_SEED`.
+   Our own patch, no upstream PR.
 
 ## Containing non-determinism
 
@@ -118,6 +122,8 @@ and an NVIDIA GPU (CPU works too, but slower).
 # 1. decision server: keep it running in a separate terminal
 #    (own environment with torch; the first start downloads ~0.7 GB of weights)
 uv run --project services/decision python services/decision/serve.py
+#    without an NVIDIA GPU: CPU torch instead of the ~7 GB CUDA build
+uv run --project services/decision --no-default-groups --group cpu python services/decision/serve.py
 
 # 2. text model
 ollama pull gemma4:e4b
@@ -142,6 +148,7 @@ If the decision server is not running, the live tests stop before opening the br
 | `TEXT_MODEL_BASE_URL`, `TEXT_MODEL`, `TEXT_MODEL_API_KEY` | Ollama, `gemma4:e4b`, `ollama` | any OpenAI-compatible endpoint for TYPE_TEXT |
 | `TEXT_MODEL_REASONING` | `none` | turns off the text model's "thinking" |
 | `TEXT_MODEL_SEED` | random per session | replays the values a session typed (the seed is in the report) |
+| `TEXT_SOURCE` | `llm` | `faker`: type values without a text model (patch 6); the `TEXT_MODEL_*` variables are then unused |
 | `CHROME_PATH` | standard Chrome/Chromium locations | a custom browser binary |
 | `CHROME_EXTRA_ARGS` | empty (`--no-sandbox` in Docker) | extra Chrome flags |
 | `CHROME_CDP_PORT` | `9333` | CDP port of the isolated Chrome |
@@ -226,6 +233,8 @@ number of actions, agent time and average decision latency. Each test card shows
 the goal, a step table (operation, element, typed text, probability, decision and text ms) and the final screenshot.
 Passwords are masked. With `--record-steps`, failed tests also get a frame after every action.
 Raw data for every run is in `reports/artifacts/<test>/run-N/run.json`.
+CI publishes the report of the latest `main` run to [GitHub Pages](https://maksimtrs.github.io/jev-ultrafast-ai-ui-tests/);
+for every run, pull requests included, the whole `reports/` folder is the run's `report` artifact.
 A step stopped by the confidence threshold is shown as the agent error, with its probability.
 
 ![HTML report, test_low_confidence_step_is_not_executed: the ambiguous goal "Add a T-shirt to the cart." is stopped by the threshold at probability 0.119, nothing is executed](docs/media/report.png)
@@ -237,25 +246,28 @@ A step stopped by the confidence threshold is shown as the agent error, with its
 
 </details>
 
-## Results (RTX 4090 Laptop)
+## Results
 
-All tests passed 3 out of 3 (`--count 3`), locally and in Docker.
+Local and Docker on an RTX 4090 Laptop: all tests passed 3 out of 3 (`--count 3`).
+CI on a GitHub-hosted `ubuntu-24.04` runner (4 vCPU, no GPU, `TEXT_SOURCE=faker`): all tests passed in one run.
 
-| | Local (Windows) | Docker (Linux) |
-|---|---|---|
-| Decision model, per decision | 40–150 ms | 25–40 ms |
-| Text model, per field | 100–190 ms | 110–350 ms |
-| Agent time, whole live suite (models warm) | ~5 s | ~3 s |
+| | Local (Windows) | Docker (Linux) | CI (CPU) |
+|---|---|---|---|
+| Decision model, per decision | 40–150 ms | 25–40 ms | 2–7 s |
+| Text model, per field | 100–190 ms | 110–350 ms | — (Faker) |
+| Agent time, whole live suite (models warm) | ~5 s | ~3 s | ~100 s |
 
 In the Linux container torch runs some operations as Triton kernels, which makes decisions 2–4× faster than on Windows.
 Locally over half of the agent time goes to the browser (actions, waiting for the page to settle), not to the models.
+In CI the decision model on CPU takes almost all of it; the whole job, setup included, takes ~3 minutes.
 
 ## Limitations
 
 - Tested only on Windows 11 with an NVIDIA GPU, locally and in Docker Desktop + WSL2. macOS is not supported yet:
-  Chrome paths, the CUDA-only torch index and the GPU reservation in `compose.yaml` are Windows/NVIDIA-specific.
-- No CI: the live tests need an NVIDIA GPU, which standard GitHub-hosted runners do not have
-  (GPU runners require a paid Team/Enterprise plan). The suite runs locally or in local Docker.
+  Chrome paths, the default CUDA torch and the GPU reservation in `compose.yaml` are Windows/NVIDIA-specific.
+- CI covers less than a local run. GitHub-hosted runners have no GPU (GPU runners require a paid Team/Enterprise plan),
+  so `.github/workflows/ui-tests.yml` runs the decision model on CPU torch and types values with `TEXT_SOURCE=faker`.
+  The text model and its patches (3, 5) are checked only locally or in local Docker.
 - The confidence threshold (0.5, on P(operation) × P(target)) is tuned on saucedemo, where every intended step
   scores 0.77 or higher;
   another site may need a different value.
