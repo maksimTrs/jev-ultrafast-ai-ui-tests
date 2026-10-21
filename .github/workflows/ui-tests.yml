@@ -2,8 +2,10 @@
 name: UI tests (CPU)
 
 on:
+  pull_request:
+    branches: [main]
   push:
-    branches: [ci/cpu-faker-text]
+    branches: [main]
 
 permissions:
   contents: read
@@ -67,3 +69,30 @@ jobs:
         with:
           name: report
           path: reports/
+
+  # The latest main report at the Pages URL; PRs keep theirs as the run artifact. A failed run is published too:
+  # that report is the one worth reading.
+  pages:
+    needs: ui-tests
+    if: ${{ !cancelled() && github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: report
+
+      # report.html is self-contained (screenshots embedded), so it is the whole site.
+      - run: mkdir site && mv report.html site/index.html
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v5

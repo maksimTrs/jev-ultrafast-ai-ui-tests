@@ -45,7 +45,9 @@ def pytest_configure(config):
 
 
 def pytest_report_header():
-    return f"text model seed: {os.environ['TEXT_MODEL_SEED']} (TEXT_MODEL_SEED={os.environ['TEXT_MODEL_SEED']} replays it)"
+    return (
+        f"text model seed: {os.environ['TEXT_MODEL_SEED']} (TEXT_MODEL_SEED={os.environ['TEXT_MODEL_SEED']} replays it)"
+    )
 
 
 @pytest.fixture(scope="session")
@@ -93,7 +95,9 @@ def text_model():
     if os.environ["TEXT_SOURCE"] == "faker":
         return
     if missing := [v for v in ("TEXT_MODEL_BASE_URL", "TEXT_MODEL", "TEXT_MODEL_API_KEY") if not os.environ.get(v)]:
-        pytest.fail(f"{', '.join(missing)} not set. Run with the settings: uv run --env-file .env pytest", pytrace=False)
+        pytest.fail(
+            f"{', '.join(missing)} not set. Run with the settings: uv run --env-file .env pytest", pytrace=False
+        )
     base, model = os.environ["TEXT_MODEL_BASE_URL"].rstrip("/"), os.environ["TEXT_MODEL"]
     request = urllib.request.Request(
         base + "/chat/completions",

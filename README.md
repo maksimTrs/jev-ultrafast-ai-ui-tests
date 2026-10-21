@@ -233,6 +233,8 @@ number of actions, agent time and average decision latency. Each test card shows
 the goal, a step table (operation, element, typed text, probability, decision and text ms) and the final screenshot.
 Passwords are masked. With `--record-steps`, failed tests also get a frame after every action.
 Raw data for every run is in `reports/artifacts/<test>/run-N/run.json`.
+CI publishes the report of the latest `main` run to [GitHub Pages](https://maksimtrs.github.io/jev-ultrafast-ai-ui-tests/);
+for every run, pull requests included, the whole `reports/` folder is the run's `report` artifact.
 A step stopped by the confidence threshold is shown as the agent error, with its probability.
 
 ![HTML report, test_low_confidence_step_is_not_executed: the ambiguous goal "Add a T-shirt to the cart." is stopped by the threshold at probability 0.119, nothing is executed](docs/media/report.png)
@@ -244,18 +246,20 @@ A step stopped by the confidence threshold is shown as the agent error, with its
 
 </details>
 
-## Results (RTX 4090 Laptop)
+## Results
 
-All tests passed 3 out of 3 (`--count 3`), locally and in Docker.
+Local and Docker on an RTX 4090 Laptop: all tests passed 3 out of 3 (`--count 3`).
+CI on a GitHub-hosted `ubuntu-24.04` runner (4 vCPU, no GPU, `TEXT_SOURCE=faker`): all tests passed in one run.
 
-| | Local (Windows) | Docker (Linux) |
-|---|---|---|
-| Decision model, per decision | 40–150 ms | 25–40 ms |
-| Text model, per field | 100–190 ms | 110–350 ms |
-| Agent time, whole live suite (models warm) | ~5 s | ~3 s |
+| | Local (Windows) | Docker (Linux) | CI (CPU) |
+|---|---|---|---|
+| Decision model, per decision | 40–150 ms | 25–40 ms | 2–7 s |
+| Text model, per field | 100–190 ms | 110–350 ms | — (Faker) |
+| Agent time, whole live suite (models warm) | ~5 s | ~3 s | ~100 s |
 
 In the Linux container torch runs some operations as Triton kernels, which makes decisions 2–4× faster than on Windows.
 Locally over half of the agent time goes to the browser (actions, waiting for the page to settle), not to the models.
+In CI the decision model on CPU takes almost all of it; the whole job, setup included, takes ~3 minutes.
 
 ## Limitations
 
