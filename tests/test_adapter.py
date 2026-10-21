@@ -3,7 +3,10 @@
 import os
 from urllib.parse import quote
 
+import pytest
 from jev_ultrafast import Browser, model
+
+from framework import jev_local
 
 LOGIN_FORM = "<form><input aria-label='Username'><input type='password' aria-label='Password'></form>"
 
@@ -92,3 +95,25 @@ def test_text_requests_carry_the_session_seed(monkeypatch):
 def test_text_model_invents_values_the_goal_does_not_give():
     assert "Never invent" not in model.TEXT_VALUE and "invent a realistic test value" in model.TEXT_VALUE
     assert "never use placeholders" in model.TEXT_VALUE
+
+
+LOGIN = "Enter username standard_user and password secret_sauce, then click Login."
+CHECKOUT = "Click Checkout, then enter first name, last name and postal code."
+
+
+def fake_text(goal, label):
+    return jev_local.fake_field_text({"goal": goal, "field": {"label": label}})[0]
+
+
+def test_faker_types_the_values_the_goal_gives():
+    assert (fake_text(LOGIN, "Username"), fake_text(LOGIN, "Password")) == ("standard_user", "secret_sauce")
+
+
+def test_faker_invents_the_values_the_goal_does_not_give():
+    values = [fake_text(CHECKOUT, label) for label in ("First Name", "Last Name", "Zip/Postal Code")]
+    assert all(values) and "and" not in values, values
+
+
+def test_faker_refuses_a_field_it_has_no_value_for():
+    with pytest.raises(ValueError, match="no value for 'Promo code'"):
+        fake_text(CHECKOUT, "Promo code")

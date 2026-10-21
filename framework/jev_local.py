@@ -4,16 +4,19 @@
 - password fields become visible to the agent (upstream PR #123);
 - TEXT_MODEL_REASONING=none is also sent in the form Ollama honours (upstream PR #39);
 - identical labels (six "Add to cart" buttons) get the name of their own item (no upstream PR);
-- the text model invents a value the goal does not give, with a session seed that replays it (no upstream PR).
+- the text model invents a value the goal does not give, with a session seed that replays it (no upstream PR);
+- TEXT_SOURCE=faker types values without a text model, for CPU-only machines such as CI (no upstream PR).
 
-All five patch upstream internals. Each checks that the code it patches still looks as expected,
+All six patch upstream internals. Each checks that the code it patches still looks as expected,
 so a changed pin fails loudly instead of silently testing something else.
 """
 
 import os
 import random
+import re
 
-from jev_ultrafast import browser, model
+from faker import Faker
+from jev_ultrafast import agent, browser, model
 
 TYPESAFE_URL = "https://api.typesafe.ai"
 # snapshot.js drops password inputs twice: an explicit filter, and role() giving them no role.
@@ -55,6 +58,12 @@ TEXT_VALUE_PATCHES = {
         "never use placeholders such as John, Jane, Doe, Smith, 12345 or 90210. Return"
     ),
 }
+# TEXT_SOURCE=faker stands in for the text model's two jobs: a value the goal gives ("username standard_user")
+# is typed as written, a field the goal only names gets a Faker value by its label. A connective after the label
+# ("last name and postal code") is not a value.
+GOAL_VALUE = r"\b{label}\s+(?!(?:and|or|then)\b)(\S+?)[.,;]?(?=\s|$)"
+FAKE_VALUES = {"first name": "first_name", "last name": "last_name", "postal code": "postcode"}
+FAKE = Faker()
 
 
 def install():
@@ -63,6 +72,7 @@ def install():
     _patch_snapshot()
     _patch_text_value()
     _patch_model_requests()
+    _patch_text_source()
 
 
 def _patch_snapshot():
@@ -105,3 +115,28 @@ def _patch_model_requests():
     model.post_json = post_json
     # model.choose() reads the key unconditionally; the local server ignores it.
     os.environ.setdefault("TYPESAFE_API_KEY", "local")
+
+
+def _patch_text_source():
+    source = os.environ.setdefault("TEXT_SOURCE", "llm")
+    if source not in {"llm", "faker"}:
+        raise RuntimeError(f"TEXT_SOURCE={source}: expected llm or faker")
+    if source == "llm":
+        return
+    # agent.py imports field_text by name, so the patch goes where it is called.
+    if agent.field_text is not model.field_text:
+        raise RuntimeError("jev_ultrafast agent.field_text changed; review the text source patch before re-pinning")
+    FAKE.seed_instance(int(os.environ["TEXT_MODEL_SEED"]))  # TEXT_MODEL_SEED replays Faker values too
+    agent.field_text = fake_field_text
+
+
+def fake_field_text(context):
+    """field_text without a model: same return shape, so the history and the report do not change."""
+    label = context["field"]["label"]
+    if found := re.search(GOAL_VALUE.format(label=re.escape(label)), context["goal"], re.IGNORECASE):
+        value = found[1]
+    elif provider := next((p for name, p in FAKE_VALUES.items() if name in label.lower()), None):
+        value = getattr(FAKE, provider)()
+    else:  # typing a random word would fail the test later, far from the cause
+        raise ValueError(f"TEXT_SOURCE=faker has no value for '{label}': give it in the goal or add it to FAKE_VALUES")
+    return value, {"model": "faker", "latency_ms": 0, "usage": {}}
