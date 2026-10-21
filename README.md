@@ -66,7 +66,7 @@ frameworks are still more reliable. This project is a working template and a tes
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/architecture-dark.png">
-  <img alt="Architecture: a pytest goal goes to the jev-ultrafast agent, which asks laya-browser on the GPU for each decision, calls Ollama only to type text and acts in an isolated Chrome on saucedemo.com; the verdict is an assertion on the real DOM, and every step with its probability goes to the HTML report." src="docs/media/architecture.png">
+  <img alt="Architecture: a pytest goal goes to the jev-ultrafast agent, which asks laya-browser (GPU, CPU in CI) for each decision, gets text to type from Ollama locally or from Faker in CI (TEXT_SOURCE) and acts in an isolated Chrome on saucedemo.com; the verdict is an assertion on the real DOM, and every step with its probability goes to the HTML report." src="docs/media/architecture.png">
 </picture>
 
 | Component | What it is | Why |

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<!-- Source of architecture.png (preferredColorScheme=1) and architecture-dark.png (preferredColorScheme=0):
+     chrome --headless --hide-scrollbars --force-device-scale-factor=2 --window-size=960,608 --virtual-time-budget=5000
+     --blink-settings=preferredColorScheme=1 --screenshot=architecture.png architecture.html -->
+<!-- The virtual time budget lets the Google Fonts load before the screenshot. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>jev-ultrafast UI tests: architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f3f6f4; --grid: #e9ecea; --frame: #eef1ef; --frame-stroke: #b9c0bd;
+    --ink: #0b1413; --muted: #4d5a55; --soft: #6b7772;
+    --node: #ffffff; --ext: #e9edeb; --accent: #1f7a50; --accent-tint: #e0ebe5; --link: #7d6a2c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0b1413; --grid: #121c1b; --frame: #0f1918; --frame-stroke: #3a4543;
+      --ink: #e3e9e6; --muted: #8f9b97; --soft: #7d8985;
+      --node: #101d1a; --ext: #141c1b; --accent: #34a874; --accent-tint: #10261f; --link: #c2b073;
+    }
+  }
+  html, body { margin: 0; background: var(--paper); }
+  svg { display: block; width: 960px; height: 608px; }
+  .name { font: 600 16px 'Geist', sans-serif; fill: var(--ink); text-anchor: middle; }
+  .sub { font: 400 12px 'Geist Mono', monospace; fill: var(--muted); text-anchor: middle; }
+  .tag { font: 500 8px 'Geist Mono', monospace; fill: var(--muted); letter-spacing: 0.08em; text-anchor: middle; }
+  .tag-box { fill: none; stroke: var(--muted); stroke-opacity: 0.5; stroke-width: 0.8; }
+  .label { font: 400 12px 'Geist Mono', monospace; fill: var(--muted); letter-spacing: 0.06em; text-anchor: middle; }
+  .mask { fill: var(--frame); }
+  .eyebrow { font: 500 8px 'Geist Mono', monospace; fill: var(--muted); letter-spacing: 0.14em; }
+  .legend { font: 400 12px 'Geist Mono', monospace; fill: var(--muted); letter-spacing: 0.06em; }
+  .wire { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+  .on-demand { stroke-dasharray: 4 3; }
+  .focal .tag, .focal .label { fill: var(--accent); }
+  .focal .tag-box { stroke: var(--accent); }
+</style>
+</head>
+<body>
+<svg viewBox="0 0 960 608" xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-labelledby="architecture-title architecture-desc">
+  <title id="architecture-title">jev-ultrafast UI tests: architecture</title>
+  <desc id="architecture-desc">A pytest test gives jev-ultrafast a goal; the agent asks laya-browser for every decision,
+    gets field text from Ollama gemma4:e4b locally or from Faker in CI (TEXT_SOURCE), acts in an isolated Chrome on
+    saucedemo, and writes steps with probabilities to the HTML report; the test asserts on the real DOM.</desc>
+  <defs>
+    <pattern id="architecture-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0 H0 V40" fill="none" stroke="var(--grid)" stroke-width="1"/>
+    </pattern>
+    <marker id="architecture-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="var(--muted)"/>
+    </marker>
+    <marker id="architecture-arrow-ink" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="var(--ink)"/>
+    </marker>
+    <marker id="architecture-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="var(--accent)"/>
+    </marker>
+    <marker id="architecture-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="var(--link)"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="608" fill="var(--paper)"/>
+  <rect width="960" height="608" fill="url(#architecture-grid)"/>
+
+  <!-- Boundary: everything below runs on one machine, a laptop or a CI runner -->
+  <rect x="24" y="40" width="768" height="488" rx="8" fill="var(--frame)" stroke="var(--frame-stroke)"
+        stroke-width="1" stroke-dasharray="4 4"/>
+  <rect x="44" y="36" width="268" height="12" fill="var(--paper)"/>
+  <text class="eyebrow" x="52" y="45">LOCAL MACHINE OR CI RUNNER · NO CLOUD APIS</text>
+
+  <!-- Connectors first, so the boxes paint over their ends -->
+  <path class="wire" d="M120,208 V104 Q120,96 128,96 H576" style="stroke: var(--ink); stroke-width: 1.6"
+        marker-end="url(#architecture-arrow-ink)"/>
+  <rect class="mask" x="296" y="76" width="88" height="12"/>
+  <text class="label" x="340" y="86" style="fill: var(--ink)">ASSERT DOM</text>
+
+  <path class="wire" d="M200,256 H264" marker-end="url(#architecture-arrow)"/>
+  <rect class="mask" x="212" y="236" width="40" height="12"/>
+  <text class="label" x="232" y="246">GOAL</text>
+
+  <path class="wire" d="M456,228 H472 Q480,228 480,220 V136 Q480,128 488,128 H576" marker-end="url(#architecture-arrow)"/>
+
+  <g class="focal">
+    <path class="wire" d="M456,256 H576" style="stroke: var(--accent); stroke-width: 1.6"
+          marker-end="url(#architecture-arrow-accent)"/>
+    <rect class="mask" x="492" y="236" width="56" height="12"/>
+    <text class="label" x="520" y="246">DECIDE</text>
+  </g>
+
+  <!-- TEXT_SOURCE picks one of the two text sources per run -->
+  <path class="wire on-demand" d="M456,276 H504 Q512,276 512,284 V368 Q512,376 520,376 H576"
+        marker-end="url(#architecture-arrow)"/>
+  <path class="wire on-demand" d="M456,292 H480 Q488,292 488,300 V460 Q488,468 496,468 H576"
+        marker-end="url(#architecture-arrow)"/>
+
+  <path class="wire" d="M360,304 V400" marker-end="url(#architecture-arrow)"/>
+  <rect class="mask" x="372" y="340" width="100" height="12"/>
+  <text class="label" x="422" y="350">STEPS + PROB</text>
+
+  <path class="wire" d="M768,112 H832" style="stroke: var(--link)" marker-end="url(#architecture-arrow-link)"/>
+  <rect x="776" y="92" width="48" height="12" fill="var(--paper)"/>
+  <text class="label" x="800" y="102" style="fill: var(--link)">HTTPS</text>
+
+  <!-- Nodes -->
+  <g>
+    <rect x="40" y="208" width="160" height="96" rx="6" fill="var(--node)" stroke="var(--ink)" stroke-width="1.2"/>
+    <rect class="tag-box" x="48" y="216" width="36" height="12" rx="2"/>
+    <text class="tag" x="66" y="225">TEST</text>
+    <text class="name" x="120" y="260">pytest test</text>
+    <text class="sub" x="120" y="280">jev.start(goal)</text>
+  </g>
+
+  <g class="focal">
+    <rect x="264" y="208" width="192" height="96" rx="6" fill="var(--accent-tint)" stroke="var(--accent)" stroke-width="1.2"/>
+    <rect class="tag-box" x="272" y="216" width="40" height="12" rx="2"/>
+    <text class="tag" x="292" y="225">AGENT</text>
+    <text class="name" x="360" y="260">jev-ultrafast</text>
+    <text class="sub" x="360" y="280">observe → decide → act</text>
+  </g>
+
+  <g>
+    <rect x="576" y="72" width="192" height="80" rx="6" fill="var(--node)" stroke="var(--ink)" stroke-width="1.2"/>
+    <rect class="tag-box" x="584" y="80" width="52" height="12" rx="2"/>
+    <text class="tag" x="610" y="89">BROWSER</text>
+    <text class="name" x="672" y="120">Isolated Chrome</text>
+    <text class="sub" x="672" y="140">CDP :9333 · temp profile</text>
+  </g>
+
+  <g>
+    <rect x="832" y="72" width="112" height="80" rx="6" fill="var(--ext)" stroke="var(--muted)" stroke-width="1"
+          stroke-dasharray="4 3"/>
+    <rect class="tag-box" x="840" y="80" width="36" height="12" rx="2"/>
+    <text class="tag" x="858" y="89">SITE</text>
+    <text class="name" x="888" y="120">saucedemo</text>
+    <text class="sub" x="888" y="140">real DOM</text>
+  </g>
+
+  <g class="focal">
+    <rect x="576" y="208" width="192" height="96" rx="6" fill="var(--accent-tint)" stroke="var(--accent)" stroke-width="1.2"/>
+    <rect class="tag-box" x="584" y="216" width="56" height="12" rx="2"/>
+    <text class="tag" x="612" y="225">SYSTEM 1</text>
+    <text class="name" x="672" y="256">laya-browser 322M</text>
+    <text class="sub" x="672" y="276">GPU / CPU in CI · :8791</text>
+    <text class="sub" x="672" y="292">op · element · prob</text>
+  </g>
+
+  <g>
+    <rect x="576" y="340" width="192" height="72" rx="6" fill="var(--node)" stroke="var(--ink)" stroke-width="1.2"/>
+    <rect class="tag-box" x="584" y="348" width="96" height="12" rx="2"/>
+    <text class="tag" x="632" y="357">TEXT_SOURCE=llm</text>
+    <text class="name" x="672" y="384">Ollama gemma4:e4b</text>
+    <text class="sub" x="672" y="402">:11434 · local / Docker</text>
+  </g>
+
+  <g>
+    <rect x="576" y="432" width="192" height="72" rx="6" fill="var(--node)" stroke="var(--ink)" stroke-width="1.2"/>
+    <rect class="tag-box" x="584" y="440" width="108" height="12" rx="2"/>
+    <text class="tag" x="638" y="449">TEXT_SOURCE=faker</text>
+    <text class="name" x="672" y="476">Faker</text>
+    <text class="sub" x="672" y="494">value from goal · CI</text>
+  </g>
+
+  <g>
+    <rect x="256" y="400" width="208" height="72" rx="6" fill="var(--ext)" stroke="var(--muted)" stroke-width="1"/>
+    <rect class="tag-box" x="264" y="408" width="44" height="12" rx="2"/>
+    <text class="tag" x="286" y="417">OUTPUT</text>
+    <text class="name" x="360" y="444">HTML report</text>
+    <text class="sub" x="360" y="462">steps · prob · screenshots</text>
+  </g>
+
+  <!-- Legend -->
+  <line x1="40" y1="548" x2="920" y2="548" stroke="var(--frame-stroke)" stroke-opacity="0.6" stroke-width="0.8"/>
+  <text class="eyebrow" x="40" y="580">LEGEND</text>
+  <rect x="112" y="568" width="16" height="12" rx="2" fill="var(--accent-tint)" stroke="var(--accent)" stroke-width="1"/>
+  <text class="legend" x="136" y="578">SYSTEM 1 · DECISION</text>
+  <rect x="300" y="568" width="16" height="12" rx="2" fill="var(--node)" stroke="var(--ink)" stroke-width="1"/>
+  <text class="legend" x="324" y="578">LOCAL COMPONENT</text>
+  <rect x="456" y="568" width="16" height="12" rx="2" fill="var(--ext)" stroke="var(--muted)" stroke-width="1"
+        stroke-dasharray="3 2"/>
+  <text class="legend" x="480" y="578">EXTERNAL</text>
+  <line x1="568" y1="574" x2="588" y2="574" stroke="var(--ink)" stroke-width="1.6"/>
+  <text class="legend" x="596" y="578">TEST VERDICT</text>
+  <line x1="712" y1="574" x2="732" y2="574" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text class="legend" x="740" y="578">ON DEMAND</text>
+</svg>
+</body>
+</html>
