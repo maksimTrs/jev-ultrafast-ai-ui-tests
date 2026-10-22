@@ -126,7 +126,6 @@ def _patch_text_source():
     # agent.py imports field_text by name, so the patch goes where it is called.
     if agent.field_text is not model.field_text:
         raise RuntimeError("jev_ultrafast agent.field_text changed; review the text source patch before re-pinning")
-    FAKE.seed_instance(int(os.environ["TEXT_MODEL_SEED"]))  # TEXT_MODEL_SEED replays Faker values too
     agent.field_text = fake_field_text
 
 
@@ -136,6 +135,9 @@ def fake_field_text(context):
     if found := re.search(GOAL_VALUE.format(label=re.escape(label)), context["goal"], re.IGNORECASE):
         value = found[1]
     elif provider := next((p for name, p in FAKE_VALUES.items() if name in label.lower()), None):
+        # Seeded per field, not once per session: a value does not depend on which tests ran before it,
+        # so TEXT_MODEL_SEED replays a CI run's values with any -k / -m selection.
+        FAKE.seed_instance(f"{os.environ['TEXT_MODEL_SEED']}:{label}")
         value = getattr(FAKE, provider)()
     else:  # typing a random word would fail the test later, far from the cause
         raise ValueError(f"TEXT_SOURCE=faker has no value for '{label}': give it in the goal or add it to FAKE_VALUES")

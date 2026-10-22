@@ -145,9 +145,15 @@ def _wait_for_controls(agent, timeout=5):
     """
     deadline = time.monotonic() + timeout
     while True:
-        agent.state["page"] = agent.browser.observe(screenshot=agent.screenshots)
-        if any(a["kind"] in INTERACTIVE for a in agent.state["page"]["actions"]) or time.monotonic() >= deadline:
-            return
+        try:
+            page = agent.browser.observe(screenshot=agent.screenshots)
+        except StalePage:  # observe() gives up on a navigating page in ~0.2 s
+            if time.monotonic() >= deadline:
+                raise
+        else:
+            agent.state["page"] = page
+            if any(a["kind"] in INTERACTIVE for a in page["actions"]) or time.monotonic() >= deadline:
+                return
         time.sleep(0.1)
 
 

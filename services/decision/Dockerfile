@@ -10,7 +10,7 @@ WORKDIR /app
 
 # The CUDA torch wheel bundles its CUDA runtime; the GPU driver comes from the host.
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked
 
 COPY serve.py ./
 

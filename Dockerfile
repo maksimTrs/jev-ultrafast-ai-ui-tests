@@ -12,7 +12,7 @@ WORKDIR /app
 
 # Dependencies before code: editing tests does not reinstall them.
 COPY pyproject.toml uv.lock .python-version ./
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked
 
 COPY framework framework
 COPY tests tests

@@ -21,6 +21,12 @@ def test_busy_cdp_port_fails_before_launch(monkeypatch):
             chrome.Chrome(headless=True)
 
 
+def test_extra_args_keep_windows_paths(monkeypatch):
+    monkeypatch.setenv("CHROME_EXTRA_ARGS", r'--disk-cache-dir="C:\My Dir\cache" --log-file=C:\tmp\chrome.log')
+
+    assert chrome.extra_args() == [r"--disk-cache-dir=C:\My Dir\cache", r"--log-file=C:\tmp\chrome.log"]
+
+
 def test_harness_daemon_is_never_the_users():
     # ensure_daemon() reuses any live daemon of this name, whichever browser it holds.
     env = {**os.environ, "BU_NAME": "default", "CHROME_CDP_PORT": "9444"}

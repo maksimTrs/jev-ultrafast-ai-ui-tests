@@ -40,7 +40,8 @@ services:
         condition: service_healthy
     environment:
       OLLAMA_HOST: http://ollama:11434
-    entrypoint: ["ollama", "pull", "gemma4:e4b"]  # no-op once the model is in the volume
+    # Pulled once: a model already in the volume is kept, even offline or when the registry moves the tag.
+    entrypoint: ["sh", "-c", "ollama show gemma4:e4b > /dev/null 2>&1 || ollama pull gemma4:e4b"]
 
   tests:
     build: .

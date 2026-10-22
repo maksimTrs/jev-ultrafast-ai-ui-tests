@@ -47,12 +47,13 @@ def test_full_checkout(jev):
     result, page = jev.then("Click the shopping cart.", max_actions=3)
     assert page.evaluate("location.pathname") == "/cart.html", result.outcome
 
-    # No values in the goal: the text model invents them, so the check is that every field holds what was typed.
+    # No values in the goal: the text model invents them, so the check is that each field holds what was typed into it.
     result, page = jev.then("Click Checkout, then enter first name, last name and postal code.", max_actions=6)
     assert page.evaluate("location.pathname") == "/checkout-step-one.html", result.outcome
     fields = page.evaluate("['first-name', 'last-name', 'postal-code'].map(id => document.getElementById(id).value)")
-    typed = [step["text"] for step in result.steps if step["operation"] == "TYPE_TEXT"]
-    assert all(fields) and sorted(fields) == sorted(typed), (fields, typed, result.outcome)
+    typed = {step["action"]: step["text"] for step in result.steps if step["operation"] == "TYPE_TEXT"}
+    expected = [typed.get(label) for label in ("First Name", "Last Name", "Zip/Postal Code")]
+    assert all(fields) and fields == expected, (fields, typed, result.outcome)
 
     # After the last field the model answers DONE rather than submitting, so submitting is its own goal.
     result, page = jev.then("Click Continue.", max_actions=3)

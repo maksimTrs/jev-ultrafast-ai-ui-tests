@@ -39,6 +39,13 @@ def chrome_path():
     raise RuntimeError("Chrome not found; set CHROME_PATH")
 
 
+def extra_args():
+    """CHROME_EXTRA_ARGS split like a shell does, but a backslash is no escape: Windows paths stay intact."""
+    lexer = shlex.shlex(os.environ.get("CHROME_EXTRA_ARGS", ""), posix=True)
+    lexer.whitespace_split, lexer.escape, lexer.commenters = True, "", ""
+    return list(lexer)
+
+
 class Chrome:
     def __init__(self, headless=False):
         # A Chrome left from an earlier run keeps the port: this one cannot bind it, and every CDP call would
@@ -58,7 +65,7 @@ class Chrome:
             f"--user-data-dir={self.profile}",
             "--no-first-run",
             "--no-default-browser-check",
-            *shlex.split(os.environ.get("CHROME_EXTRA_ARGS", "")),
+            *extra_args(),
             *(["--headless=new"] if headless else []),
             "about:blank",
         ]

@@ -114,6 +114,14 @@ def test_faker_invents_the_values_the_goal_does_not_give():
     assert all(values) and "and" not in values, values
 
 
+def test_faker_value_depends_only_on_the_seed_and_the_field():
+    # Replaying a CI run with -k types the same values, whichever tests ran before it.
+    first = fake_text(CHECKOUT, "First Name")
+    fake_text(CHECKOUT, "Last Name")
+
+    assert fake_text(CHECKOUT, "First Name") == first
+
+
 def test_faker_refuses_a_field_it_has_no_value_for():
     with pytest.raises(ValueError, match="no value for 'Promo code'"):
         fake_text(CHECKOUT, "Promo code")

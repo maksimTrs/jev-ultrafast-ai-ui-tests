@@ -13,7 +13,7 @@ https://github.com/user-attachments/assets/6a466c0d-6240-47f8-9c8e-3f8567e7c385
 
 
 > [!WARNING]
-> ⚠️ **Tested only on Windows 11 + NVIDIA GPU** (locally and in Docker Desktop + WSL2). macOS is not supported yet — see [Limitations](#limitations).
+> ⚠️ **Tested on Windows 11 + NVIDIA GPU** (locally and in Docker Desktop + WSL2) and on a Linux CPU runner in CI. macOS is not supported yet — see [Limitations](#limitations).
 
 ## Why
 
@@ -43,7 +43,7 @@ Cloud Jev is waitlisted and paid, so this project uses an open alternative,
 |---|---|---|---|
 | A step is defined by | selector + action in code | natural-language goal | natural-language goal |
 | What the model can do | — | generate any action, including a non-existent one | only choose among observed elements |
-| Time per decision | instant | text generation on every step | 25–150 ms (see results) |
+| Time per decision | instant | text generation on every step | 25–150 ms on GPU, 2–7 s on CPU (see results) |
 | Explainability | stack trace and selector | the model's reasoning as text | probability of every decision in the report |
 | Where it runs | locally | usually a cloud API | locally, page data never leaves the machine |
 
@@ -97,7 +97,8 @@ If the code changed after a re-pin, the run fails with a clear error instead of 
    "log in as standard_user" does not. A field the goal only names gets a [Faker](https://faker.readthedocs.io/) value
    if its label is in `FAKE_VALUES` (first name, last name, postal code); a new kind of field goes there.
    Any other field fails the step with `TEXT_SOURCE=faker has no value for '<label>'`. Faker is seeded with
-   `TEXT_MODEL_SEED`. Our own patch, no upstream PR.
+   `TEXT_MODEL_SEED` and the field's label, so a value does not depend on which tests ran before it.
+   Our own patch, no upstream PR.
 
 ## Containing non-determinism
 
@@ -115,7 +116,7 @@ narrow job, and the verdict is plain code.
 | | Bounds: `max_actions` per goal (status `budget`); three actions in a row that change nothing stop the run (`blocked`) | `runner.py`, jev-ultrafast `agent.py` |
 | Input | Duplicate labels get their item's name (patch 4); short goals, preconditions without the agent ([rules](#writing-a-test)); isolated Chrome, clean origin before every test | `jev_local.py`, `chrome.py`, `conftest.py` |
 | Verdict | An `assert` on the real DOM or `localStorage`, never the agent's status; exact state, invented values checked in the fields ([rules](#writing-a-test)). `test_low_confidence_step_is_not_executed` checks the threshold itself | `tests/` |
-| Pins | jev-ultrafast commit, laya revision, Ollama 0.35.0 in Docker; the patches and the `Agent.state` keys fail loudly when a re-pin changes the code under them | `pyproject.toml`, `serve.py`, `jev_local.py`, `runner.py` |
+| Pins | jev-ultrafast commit, laya revision, Ollama 0.35.0 in Docker; `gemma4:e4b` is pinned by tag only, and compose pulls it once into the volume; the patches and the `Agent.state` keys fail loudly when a re-pin changes the code under them | `pyproject.toml`, `serve.py`, `compose.yaml`, `jev_local.py`, `runner.py` |
 | Measurement | `--count N` reports pass^N. Repeats measure the environment (timing, network, browser), not the decisions or the typed values (one seed per session); robustness to phrasing needs varied goals, which the suite does not cover yet. Every step's probability is in the [report](#report) | `conftest.py` |
 
 ## Running locally
@@ -151,10 +152,10 @@ If the decision server is not running, the live tests stop before opening the br
 |---|---|---|
 | `LAYA_URL` | `http://127.0.0.1:8791` | decision server |
 | `DECISION_HOST`, `DECISION_PORT` | `127.0.0.1` (`0.0.0.0` in Docker), `8791` | where `serve.py` listens; change `LAYA_URL` to match |
-| `TEXT_MODEL_BASE_URL`, `TEXT_MODEL`, `TEXT_MODEL_API_KEY` | Ollama, `gemma4:e4b`, `ollama` | any OpenAI-compatible endpoint for TYPE_TEXT |
-| `TEXT_MODEL_REASONING` | `none` | turns off the text model's "thinking" |
+| `TEXT_MODEL_BASE_URL`, `TEXT_MODEL`, `TEXT_MODEL_API_KEY` | none, required with `TEXT_SOURCE=llm` (`.env.example`: Ollama, `gemma4:e4b`, `ollama`) | any OpenAI-compatible endpoint for TYPE_TEXT |
+| `TEXT_MODEL_REASONING` | unset: upstream asks for `low` effort (`.env.example`: `none`) | `none` turns off the text model's "thinking" |
 | `TEXT_MODEL_SEED` | random per session | replays the values a session typed (the seed is in the report) |
-| `TEXT_SOURCE` | `llm` | `faker`: type values without a text model (patch 6); the `TEXT_MODEL_*` variables are then unused. CI sets it in `.github/workflows/ui-tests.yml` |
+| `TEXT_SOURCE` | `llm` | `faker`: type values without a text model (patch 6); the other `TEXT_MODEL_*` variables are then unused, `TEXT_MODEL_SEED` seeds Faker. CI sets it in `.github/workflows/ui-tests.yml` |
 | `CHROME_PATH` | standard Chrome/Chromium locations | a custom browser binary |
 | `CHROME_EXTRA_ARGS` | empty (`--no-sandbox` in Docker) | extra Chrome flags |
 | `CHROME_CDP_PORT` | `9333` | CDP port of the isolated Chrome |
@@ -228,7 +229,7 @@ Rules for phrasing goals (found experimentally):
 - check *which* item changed, not how many: `cart-contents == "[4]"`, not a cart badge of "1". A wrong but similar
   action keeps a count right;
 - name the fields, not the values ("enter first name, last name and postal code"): the text model invents them,
-  and the test checks that every field holds what the agent typed (`result.steps`). Values the test depends on,
+  and the test checks that each field holds what the agent typed into it (`result.steps`). Values the test depends on,
   like the login, go into the goal and are typed as given;
 - CI types with Faker, not gemma: write a value right after its field ("username standard_user") and add a new kind
   of field to `FAKE_VALUES` ([patch 6](#jev-ultrafast-patches-frameworkjev_localpy)), or the test passes locally and fails in CI;
@@ -271,7 +272,8 @@ In CI the decision model on CPU takes almost all of it; the whole job, setup inc
 
 ## Limitations
 
-- Tested only on Windows 11 with an NVIDIA GPU, locally and in Docker Desktop + WSL2. macOS is not supported yet:
+- Tested on Windows 11 with an NVIDIA GPU, locally and in Docker Desktop + WSL2, and on a Linux CPU runner in CI
+  (see the next item). macOS is not supported yet:
   Chrome paths, the default CUDA torch and the GPU reservation in `compose.yaml` are Windows/NVIDIA-specific.
 - CI covers less than a local run. GitHub-hosted runners have no GPU (GPU runners require a paid Team/Enterprise plan),
   so `.github/workflows/ui-tests.yml` runs the decision model on CPU torch and types values with `TEXT_SOURCE=faker`.
