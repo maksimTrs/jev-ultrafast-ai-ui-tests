@@ -11,6 +11,7 @@ All six patch upstream internals. Each checks that the code it patches still loo
 so a changed pin fails loudly instead of silently testing something else.
 """
 
+import inspect
 import os
 import random
 import re
@@ -59,9 +60,9 @@ TEXT_VALUE_PATCHES = {
     ),
 }
 # TEXT_SOURCE=faker stands in for the text model's two jobs: a value the goal gives ("username standard_user")
-# is typed as written, a field the goal only names gets a Faker value by its label. A connective after the label
-# ("last name and postal code") is not a value.
-GOAL_VALUE = r"\b{label}\s+(?!(?:and|or|then)\b)(\S+?)[.,;]?(?=\s|$)"
+# is typed as written, a field the goal only names gets a Faker value by its label. A connective or a preposition
+# after the label ("last name and postal code", "first name in the form") is not a value.
+GOAL_VALUE = r"\b{label}\s+(?!(?:and|or|then|in|into|with|to|from|on|for|field)\b)(\S+?)[.,;]?(?=\s|$)"
 FAKE_VALUES = {"first name": "first_name", "last name": "last_name", "postal code": "postcode"}
 FAKE = Faker()
 
@@ -97,9 +98,18 @@ def _patch_text_value():
     model.TEXT_VALUE = text_value
 
 
+def laya_url():
+    return os.environ.get("LAYA_URL", "http://127.0.0.1:8791").rstrip("/")
+
+
 def _patch_model_requests():
+    # Both are matched by value below, so a re-pin that changes them would silently skip the patch:
+    # a moved decision URL would send pages to the cloud.
+    source = inspect.getsource(model.choose) + inspect.getsource(model.field_text)
+    if f'"{TYPESAFE_URL}/v1/systemone"' not in source or "{'enabled': False}" not in source.replace('"', "'"):
+        raise RuntimeError("jev_ultrafast model requests changed; review the request patch before re-pinning")
     upstream = model.post_json
-    base = os.environ.get("LAYA_URL", "http://127.0.0.1:8791").rstrip("/")
+    base = laya_url()
     # The model samples (gemma's default temperature is 1), so every session types new values;
     # the seed is in the report, and TEXT_MODEL_SEED=<seed> replays a session's values.
     seed = int(os.environ.setdefault("TEXT_MODEL_SEED", str(random.randrange(2**31))))
@@ -109,7 +119,11 @@ def _patch_model_requests():
             body = {**body, "seed": seed}
         if body.get("reasoning") == REASONING_OFF:
             body = {**body, "reasoning": {"effort": "none"}}
-        return upstream(url.replace(TYPESAFE_URL, base), key, body)
+        url = url.replace(TYPESAFE_URL, base)
+        try:
+            return upstream(url, key, body)
+        except RuntimeError as exc:  # upstream's message does not say which model: decisions or text
+            raise RuntimeError(f"{exc} ({url})") from exc
 
     post_json.local = True
     model.post_json = post_json

@@ -1,5 +1,6 @@
 """Drives natural-language goals through jev-ultrafast and keeps a compact record of every step."""
 
+import logging
 import re
 import time
 from dataclasses import asdict, dataclass
@@ -7,6 +8,8 @@ from pathlib import Path
 
 from jev_ultrafast import Agent
 from jev_ultrafast.browser import StalePage
+
+log = logging.getLogger(__name__)
 
 SECRET_FIELD = re.compile("password", re.IGNORECASE)
 INTERACTIVE = {"click", "fill", "select"}
@@ -92,6 +95,9 @@ def _drive(agent, goal, max_actions):
     except Exception as exc:  # the agent's own failures are a result to report, not a test crash
         error = f"{type(exc).__name__}: {exc}{_last_decision(agent.state)}"
     state = agent.state
+    for entry in state["history"]:  # the goal may give the password that the steps mask
+        if entry["text"] and SECRET_FIELD.search(entry["action"]):
+            goal = goal.replace(entry["text"], "*" * len(entry["text"]))
     return RunResult(
         goal=goal,
         status=status,
@@ -152,7 +158,10 @@ def _wait_for_controls(agent, timeout=5):
                 raise
         else:
             agent.state["page"] = page
-            if any(a["kind"] in INTERACTIVE for a in page["actions"]) or time.monotonic() >= deadline:
+            if any(a["kind"] in INTERACTIVE for a in page["actions"]):
+                return
+            if time.monotonic() >= deadline:
+                log.warning("No controls on %s after %ss: the model will likely answer DONE", page["url"], timeout)
                 return
         time.sleep(0.1)
 

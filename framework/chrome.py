@@ -1,6 +1,7 @@
 """An isolated Chrome for the test session: own temp profile and CDP port, never the user's browser."""
 
 import json
+import logging
 import os
 import shlex
 import shutil
@@ -15,6 +16,8 @@ from browser_harness.admin import ensure_daemon, restart_daemon
 from browser_harness.helpers import cdp
 
 from framework import CDP_HOST, CDP_PORT, HARNESS_NAME
+
+log = logging.getLogger(__name__)
 
 KNOWN_PATHS = (
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -51,25 +54,31 @@ class Chrome:
         # A Chrome left from an earlier run keeps the port: this one cannot bind it, and every CDP call would
         # silently drive the old (perhaps headless) browser instead.
         with socket.socket() as probe:
+            probe.settimeout(0.2)  # on Windows a refused loopback connect retries for ~2 s
             if probe.connect_ex((CDP_HOST, CDP_PORT)) == 0:
                 raise RuntimeError(
                     f"Port {CDP_PORT} is already in use, probably by a Chrome left from an earlier run. "
                     "Close it or set CHROME_CDP_PORT."
                 )
+        binary = chrome_path()
         self.profile = tempfile.mkdtemp(prefix="jev-chrome-")
-        (Path(self.profile) / "Default").mkdir()
-        (Path(self.profile) / "Default" / "Preferences").write_text(json.dumps(PROFILE_PREFS), encoding="utf-8")
-        args = [
-            chrome_path(),
-            f"--remote-debugging-port={CDP_PORT}",
-            f"--user-data-dir={self.profile}",
-            "--no-first-run",
-            "--no-default-browser-check",
-            *extra_args(),
-            *(["--headless=new"] if headless else []),
-            "about:blank",
-        ]
-        self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:  # a wrong CHROME_PATH fails in Popen: the profile is not Chrome's to clean up yet
+            (Path(self.profile) / "Default").mkdir()
+            (Path(self.profile) / "Default" / "Preferences").write_text(json.dumps(PROFILE_PREFS), encoding="utf-8")
+            args = [
+                binary,
+                f"--remote-debugging-port={CDP_PORT}",
+                f"--user-data-dir={self.profile}",
+                "--no-first-run",
+                "--no-default-browser-check",
+                *extra_args(),
+                *(["--headless=new"] if headless else []),
+                "about:blank",
+            ]
+            self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except BaseException:
+            self._remove_profile()
+            raise
         try:
             self.version = self._wait_for_cdp()
             startup_tabs = self._page_ids()
@@ -140,3 +149,4 @@ class Chrome:
             if not Path(self.profile).exists():
                 return
             time.sleep(0.25)
+        log.warning("Chrome profile %s is still locked and was left behind", self.profile)

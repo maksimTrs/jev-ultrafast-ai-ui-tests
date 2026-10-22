@@ -58,3 +58,17 @@ def test_failed_start_leaves_no_chrome(monkeypatch, tmp_path):
     with socket.socket() as probe:
         assert probe.connect_ex((chrome.CDP_HOST, port)) != 0, "Chrome still serves CDP"
     assert not list(tmp_path.iterdir()), "temp profile left behind"
+
+
+def test_wrong_chrome_path_leaves_no_profile(monkeypatch, tmp_path):
+    with socket.socket() as free:
+        free.bind((chrome.CDP_HOST, 0))
+        monkeypatch.setattr(chrome, "CDP_PORT", free.getsockname()[1])
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "temp"))
+    (tmp_path / "temp").mkdir()
+    monkeypatch.setenv("CHROME_PATH", str(tmp_path / "no-chrome.exe"))
+
+    with pytest.raises(FileNotFoundError):
+        chrome.Chrome(headless=True)
+
+    assert not list((tmp_path / "temp").iterdir()), "temp profile left behind"

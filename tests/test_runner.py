@@ -96,6 +96,19 @@ def test_navigating_page_is_observed_until_it_settles():
     assert result.status == "budget", result.outcome
 
 
+class TypingPassword(Deciding):
+    def command(self, name, body=None):
+        super().command(name, body)
+        if name == "act":
+            self.state["history"][-1].update(operation="TYPE_TEXT", action="Password", text="secret_sauce")
+
+
+def test_typed_password_is_masked_in_the_goal_too():
+    result = runner._drive(TypingPassword(click=0.9), "Enter password secret_sauce.", max_actions=1)
+
+    assert result.goal == "Enter password ************.", result.goal
+
+
 def test_report_masks_what_was_typed_into_a_password_field():
     typed = {
         "step": 1, "operation": "TYPE_TEXT", "text": "secret_sauce", "probability": 0.9,

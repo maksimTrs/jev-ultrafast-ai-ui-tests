@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer PR push supersedes the running one; on main a cancel could interrupt the Pages deploy.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ui-tests:
@@ -38,7 +39,9 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       # serve.py pins the laya-browser revision, so a re-pin downloads the new weights.
-      - uses: actions/cache@v6
+      # Restore and save are split: actions/cache saves only after a green job, so red runs re-downloaded them.
+      - id: hf-cache
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/huggingface
           key: laya-browser-${{ hashFiles('services/decision/serve.py') }}
@@ -53,6 +56,7 @@ jobs:
         run: uv sync --locked
 
       - name: Wait for the decision server
+        id: decision
         run: |
           for _ in $(seq 120); do
             curl -sf -o /dev/null http://127.0.0.1:8791/ && exit 0
@@ -60,6 +64,13 @@ jobs:
           done
           cat reports/decision.log
           exit 1
+
+      # Saved once the server is up: its weights are complete then, whatever the tests do.
+      - if: ${{ always() && steps.decision.outcome == 'success' && steps.hf-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/huggingface
+          key: ${{ steps.hf-cache.outputs.cache-primary-key }}
 
       - name: Run tests
         run: uv run --locked pytest --headless
@@ -84,15 +95,25 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/download-artifact@v8
+        continue-on-error: true  # a run that failed during setup uploaded nothing
         with:
           name: report
 
       # report.html is self-contained (screenshots embedded), so it is the whole site.
-      - run: mkdir site && mv report.html site/index.html
+      # A run that failed before pytest has none: the published report stays, with a warning instead of a red job.
+      - id: site
+        run: |
+          if [ -f report.html ]; then
+            mkdir site && mv report.html site/index.html && echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No report.html: the run failed before the tests, see the ui-tests job log"
+          fi
 
-      - uses: actions/upload-pages-artifact@v5
+      - if: ${{ steps.site.outputs.ready == 'true' }}
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
-      - id: deploy
+      - if: ${{ steps.site.outputs.ready == 'true' }}
+        id: deploy
         uses: actions/deploy-pages@v5

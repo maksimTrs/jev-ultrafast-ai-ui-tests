@@ -36,7 +36,7 @@ def pytest_configure(config):
     text_model = f"{os.environ.get('TEXT_MODEL', '-')} @ {os.environ.get('TEXT_MODEL_BASE_URL', '-')}"
     config.stash[metadata_key].update(
         {
-            "Decision model": f"laya-browser @ {os.environ.get('LAYA_URL', 'http://127.0.0.1:8791')}",
+            "Decision model": f"laya-browser @ {jev_local.laya_url()}",
             "Text model": "faker (TEXT_SOURCE=faker)" if os.environ["TEXT_SOURCE"] == "faker" else text_model,
             "Text model seed": os.environ["TEXT_MODEL_SEED"],
             "Mode": f"{os.environ.get('RUN_MODE', 'local')}, {'headless' if headless else 'headed'}",
@@ -74,7 +74,7 @@ def logged_in(chrome, site):
 @pytest.fixture(scope="session")
 def decision_model():
     """Without the decision server every agent fails on its first step; say so once, before any browser work."""
-    url = os.environ.get("LAYA_URL", "http://127.0.0.1:8791")
+    url = jev_local.laya_url()
     try:
         urllib.request.urlopen(url, timeout=5).close()
         return
@@ -152,10 +152,13 @@ class JevSession:
 
     def _record(self, result):
         browser = self.agent.browser
-        screenshot = browser.call("Page.captureScreenshot", format="jpeg", quality=72)["data"]
         folder = self._run_folder()
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "run.json").write_text(json.dumps(result.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+        try:
+            screenshot = browser.call("Page.captureScreenshot", format="jpeg", quality=72)["data"]
+        except Exception:  # a crashed tab must not hide the run's result behind a CDP error
+            screenshot = None
         self.request.node.jev_runs.append((result, screenshot, folder))
         self.request.config.stash[RUNS].append((f"{self.request.node.name}#{len(self.request.node.jev_runs)}", result))
         return result, browser
@@ -185,7 +188,8 @@ def pytest_runtest_makereport(item, call):
     extras = getattr(report, "extras", [])
     for number, (result, screenshot, folder) in enumerate(runs, 1):
         extras.append(pytest_html.extras.html(_steps_html(number, result)))
-        extras.append(pytest_html.extras.jpg(screenshot, name=f"Run {number}: final page"))
+        if screenshot:
+            extras.append(pytest_html.extras.jpg(screenshot, name=f"Run {number}: final page"))
         if report.failed:
             for frame in sorted((folder / "frames").glob("*.jpg")):
                 frame_b64 = base64.b64encode(frame.read_bytes()).decode()  # embedded: the report is one file

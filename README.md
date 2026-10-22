@@ -136,11 +136,12 @@ ollama pull gemma4:e4b
 
 # 3. tests
 cp .env.example .env
-uv run pytest -m "not live"            # offline adapter checks, no models needed
+uv run pytest -m "not live"            # offline checks: a real Chrome, no models
 uv run --env-file .env pytest          # everything, in a visible Chrome window
 uv run --env-file .env pytest --headless --record-steps
 uv run --env-file .env pytest -m live --headless --count 3   # every test 3 times, the summary reports pass^3
 TEXT_SOURCE=faker uv run pytest --headless   # what CI runs: no Ollama, values from the goal or Faker (patch 6)
+# PowerShell: $env:TEXT_SOURCE="faker"; uv run pytest --headless
 ```
 
 If the decision server is not running, the live tests stop before opening the browser with
@@ -240,7 +241,7 @@ Rules for phrasing goals (found experimentally):
 `reports/report.html` is a single self-contained file (pytest-html). The results table has columns for the agent status,
 number of actions, agent time and average decision latency. Each test card shows, for every agent run:
 the goal, a step table (operation, element, typed text, probability, decision and text ms) and the final screenshot.
-Passwords are masked. With `--record-steps`, failed tests also get a frame after every action.
+A value typed into a field whose label contains "password" is masked, in the steps and in the goal; other secret fields are not. With `--record-steps`, failed tests also get a frame after every action.
 Raw data for every run is in `reports/artifacts/<test>/run-N/run.json`.
 CI publishes the report of the latest `main` run to [GitHub Pages](https://maksimtrs.github.io/jev-ultrafast-ai-ui-tests/);
 for every run, pull requests included, the whole `reports/` folder is the run's `report` artifact.

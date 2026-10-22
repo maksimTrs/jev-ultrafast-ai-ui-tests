@@ -18,5 +18,5 @@ package = false
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-addopts = "--html=reports/report.html --self-contained-html"
+addopts = "--strict-markers --html=reports/report.html --self-contained-html"
 markers = ["live: drives a real browser with the local decision and text models"]

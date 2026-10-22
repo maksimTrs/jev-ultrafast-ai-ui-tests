@@ -32,7 +32,7 @@ def test_low_confidence_step_is_not_executed(jev, logged_in):
     result, page = jev.start("/inventory.html", "Add a T-shirt to the cart.", max_actions=4)
 
     assert result.status == "blocked", result.outcome
-    assert result.error.startswith("probability "), result.outcome
+    assert (result.error or "").startswith("probability "), result.outcome
     assert page.evaluate("localStorage.getItem('cart-contents')") is None  # nothing was added
 
 

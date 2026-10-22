@@ -3,6 +3,7 @@
 import os
 from urllib.parse import quote
 
+import httpx
 import pytest
 from jev_ultrafast import Browser, model
 
@@ -75,7 +76,25 @@ def test_decisions_go_to_local_server(monkeypatch):
     sent = []
     monkeypatch.setattr(model.CLIENT, "post", lambda url, **_: sent.append(url) or Response())
     model.post_json("https://api.typesafe.ai/v1/systemone", "key", {})
-    assert sent == [os.environ.get("LAYA_URL", "http://127.0.0.1:8791").rstrip("/") + "/v1/systemone"]
+    assert sent == [jev_local.laya_url() + "/v1/systemone"]
+
+
+def test_moved_decision_url_fails_the_install(monkeypatch):
+    # replace() would miss a new URL and send the page to the cloud.
+    monkeypatch.setattr(model, "choose", lambda state, goal, history: model.post_json("https://new.host/v2", "", {}))
+
+    with pytest.raises(RuntimeError, match="model requests changed"):
+        jev_local._patch_model_requests()
+
+
+def test_model_error_names_the_server(monkeypatch):
+    def refused(url, **_):
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(model.CLIENT, "post", refused)
+
+    with pytest.raises(RuntimeError, match=f"Model connection failed.*{jev_local.laya_url()}/v1/systemone"):
+        model.post_json("https://api.typesafe.ai/v1/systemone", "key", {})
 
 
 def test_disabled_reasoning_reaches_ollama(monkeypatch):
@@ -112,6 +131,10 @@ def test_faker_types_the_values_the_goal_gives():
 def test_faker_invents_the_values_the_goal_does_not_give():
     values = [fake_text(CHECKOUT, label) for label in ("First Name", "Last Name", "Zip/Postal Code")]
     assert all(values) and "and" not in values, values
+
+
+def test_faker_does_not_take_a_preposition_for_a_value():
+    assert fake_text("Enter first name in the checkout form.", "First Name") != "in"
 
 
 def test_faker_value_depends_only_on_the_seed_and_the_field():
